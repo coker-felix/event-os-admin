@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { XIcon } from "@phosphor-icons/react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+  return <DialogPrimitive.Root data-slot="dialog" {...props} disablePointerDismissal />
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {

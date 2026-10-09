@@ -1,4 +1,3 @@
-import { format } from 'date-fns'
 import { CalendarBlankIcon } from '@phosphor-icons/react'
 
 import { Button } from '@/components/ui/button'
@@ -8,20 +7,23 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { calendarDateFromISO, formatDate, isoDateFromParts, type ISODate } from '@/lib/date-format'
 
-export interface DatePickerProps {
-  value?: Date
-  onValueChange: (value: Date | undefined) => void
+export interface AppDatePickerProps {
+  value?: ISODate | null
+  onValueChange: (value: ISODate | null) => void
   placeholder?: string
   disabled?: boolean
 }
 
-export function DatePicker({
+export function AppDatePicker({
   value,
   onValueChange,
   placeholder = 'Pick a date',
   disabled,
-}: DatePickerProps) {
+}: AppDatePickerProps) {
+  const selectedDate = calendarDateFromISO(value)
+
   return (
     <Popover>
       <PopoverTrigger
@@ -35,11 +37,18 @@ export function DatePicker({
         }
       >
         <CalendarBlankIcon data-icon="inline-start" />
-        {value ? format(value, 'PPP') : <span>{placeholder}</span>}
+        {value ? formatDate(value) : <span>{placeholder}</span>}
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
-        <Calendar mode="single" selected={value} onSelect={onValueChange} />
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(date) => onValueChange(date ? isoDateFromParts(date.getFullYear(), date.getMonth() + 1, date.getDate()) : null)}
+        />
       </PopoverContent>
     </Popover>
   )
 }
+
+/** @deprecated Use AppDatePicker and keep values as ISO calendar date strings. */
+export const DatePicker = AppDatePicker

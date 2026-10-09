@@ -1,0 +1,3901 @@
+openapi: 3.0.3
+info:
+  title: Event OS — Admin API
+  version: "1.0.0"
+  description: |
+    Staff/back-office surface of the Event OS API gateway: platform configuration,
+    KYC/KYB review, catalog administration, commerce rules, vendor/venue
+    oversight, and the Documents contract-catalog/operations console.
+
+    ## Authentication
+    Every route below except `POST /api/admin/login` requires a **Bearer JWT**
+    whose claims carry `kind: admin` (see `BearerAuth`). The token is minted by
+    `POST /api/admin/login` and otherwise behaves like any other session token —
+    there is no separate admin refresh flow.
+
+    An `X-API-Key` header is also accepted by the gateway's authentication layer,
+    but an API key always resolves to `kind: user`, never `kind: admin`. Every
+    route in this spec therefore answers **403 Forbidden** to an API-key-bearing
+    request, regardless of which permissions that key's owner holds. Admin access
+    is JWT-only in practice.
+
+    Beyond `kind: admin`, each route also requires a specific **permission**
+    (e.g. `admin.config.manage`, `admin.kyc.review`, `admin.documents.operations.manage`),
+    resolved server-side from the admin's assigned roles
+    (see `GET /api/admin/admins/{id}/roles` and the Roles/Permissions catalog
+    below). A JWT with `kind: admin` but a missing permission still gets
+    **403 Forbidden** — the permission name is noted in each operation's
+    description.
+
+    ## Error model
+    Every error body is `{"error": "<human-readable message>"}`, occasionally
+    with an additional `"reason"` field for structured client handling. The
+    gateway maps backend gRPC status codes to HTTP uniformly:
+
+    | gRPC code | HTTP status |
+    |---|---|
+    | `InvalidArgument` | 400 |
+    | `Unauthenticated` | 401 |
+    | `PermissionDenied` | 403 |
+    | `NotFound` | 404 |
+    | `FailedPrecondition` / `AlreadyExists` | 409 |
+    | `ResourceExhausted` | 429 |
+    | `Unavailable` | 502 (backend service unreachable) |
+    | anything else | 500 |
+
+    Several Documents-catalog mutations return a **typed 409** whose `reason`
+    is one of: `effective_range_overlap`, `template_not_publishable`,
+    `stale_revision`, `invalid_version_state`, `retention_active`, `legal_hold`.
+
+    ## Rate limiting
+    There is no blanket per-IP or per-key rate limiter at the gateway for admin
+    routes. The only throttling that applies is the general rule above: any
+    backend-reported `ResourceExhausted` condition surfaces as **429**. No admin
+    route in this spec currently enforces a concrete numeric limit.
+
+    ## Pagination conventions (read carefully — they differ by subsystem)
+    - **Documents-catalog lists** (platform legal identities, clauses, contract
+      templates, document artifacts, retention policies, render jobs,
+      lifecycle events) use **snake_case query parameters**: `page_size`
+      (default 50, max 100) and `page_token`. The response carries
+      `nextPageToken` (camelCase, protojson).
+    - **Contract backfill jobs/results and profile↔org reconciliation lists**
+      use **camelCase query parameters**: `pageToken` and `pageSize` (default
+      50, max 200).
+    - **Platform catalog lists** (countries, subdivisions, distribution
+      channels, event categories) use `limit` (default 100, max 500) and
+      `offset`.
+    - A handful of simple admin lists (users, KYC profiles, admins, roles,
+      permissions, tax/fee rules) return everything in one call — no pagination.
+
+    ## Reason-required mutations
+    Several mutations require a non-empty `reason` field and are audited:
+    artifact legal holds and tombstones, render-job and lifecycle-event
+    retries, contract `resolve-blocked`, vendor/venue managing-org resolution,
+    and venue-claim decisions accept an optional `note` (not required). These
+    are called out per operation below.
+  contact:
+    name: Event OS Platform Team
+servers:
+  - url: http://localhost:8080
+    description: Local / docker-compose (ADDR=:8080)
+  - url: https://api.eventos.gh
+    description: Production — placeholder; point this at the actual deployed gateway host.
+security:
+  - BearerAuth: []
+tags:
+  - name: Auth
+    description: Admin credential login.
+  - name: Users
+    description: Consumer account administration.
+  - name: KYC
+    description: KYC/KYB case review for organizations, vendors, and venues.
+  - name: Platform Config
+    description: Website configuration (site name, branding, support contacts).
+  - name: Admins & Roles
+    description: Staff accounts and the roles/permissions catalog.
+  - name: Sponsors
+    description: Admin override of the sponsor catalog.
+  - name: Feature Flags
+    description: Global feature-flag defaults.
+  - name: Catalogs
+    description: Supported countries/subdivisions, distribution channels, and event categories.
+  - name: Tax & Commerce
+    description: Tax rules, platform-fee rules, and commerce settings.
+  - name: Payouts
+    description: Cross-organization payout reads.
+  - name: Vendors & Venues
+    description: Vendor/venue status, directories, claims, and organization linking.
+  - name: Document Catalog
+    description: Platform legal identities, clauses, contract templates, signing windows, artifacts, and retention policies.
+  - name: Document Operations
+    description: Contract inspection, lifecycle-event delivery, and render-job operations.
+  - name: Contract Backfills
+    description: Retroactive onboarding-contract backfill jobs and on-demand reconciliation.
+
+paths:
+  # ---------------------------------------------------------------- Auth
+  /api/admin/login:
+    post:
+      tags: [Auth]
+      operationId: HandleAdminLogin
+      summary: Admin credential login
+      description: |
+        Public (no credentials). Exchanges an admin's email/password for a
+        session JWT whose claims carry `kind: admin`. There is no separate
+        admin registration route — admin accounts are provisioned by another
+        admin via `POST /api/admin/admins`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Login succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: Bearer JWT for subsequent admin calls. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Users
+  /api/admin/users:
+    get:
+      tags: [Users]
+      operationId: HandleAdminListUsers
+      summary: List consumer accounts
+      description: Requires `admin.users.read`.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [guest, active, suspended] }
+          description: Optional filter; "" lists every status.
+      responses:
+        "200":
+          description: Users matching the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Users]
+      operationId: HandleAdminCreateUser
+      summary: Onboard a consumer account
+      description: Requires `admin.users.manage`. Same input shape as self-serve registration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                password: { type: string, format: password }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { id: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/users/{id}:
+    get:
+      tags: [Users]
+      operationId: HandleAdminGetUser
+      summary: Get one consumer account
+      description: Requires `admin.users.read`. Admin reads carry provenance fields (`createdVia`, `createdByOrgId`) the consumer's own profile never exposes.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: The user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/users/{id}/status:
+    patch:
+      tags: [Users]
+      operationId: HandleAdminSetUserStatus
+      summary: Suspend or reactivate a consumer account
+      description: Requires `admin.users.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { id: { type: string }, status: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- KYC
+  /api/admin/kyc/profiles:
+    get:
+      tags: [KYC]
+      operationId: HandleListKYC
+      summary: List every KYC/KYB case
+      description: Requires `admin.kyc.review`. Covers organization, vendor, and venue cases.
+      responses:
+        "200":
+          description: All KYC profiles.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items: { $ref: "#/components/schemas/KYCProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/kyc/profiles/{id}:
+    get:
+      tags: [KYC]
+      operationId: HandleGetKYCProfile
+      summary: Get a KYC case with its submitted documents
+      description: Requires `admin.kyc.review`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: The case and its documents.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile: { $ref: "#/components/schemas/KYCProfile" }
+                  documents:
+                    type: array
+                    items: { $ref: "#/components/schemas/KYCDocument" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/kyc/profiles/{id}/decision:
+    post:
+      tags: [KYC]
+      operationId: HandleDecideKYC
+      summary: Approve or reject a KYC/KYB case
+      description: |
+        Requires `admin.kyc.review`. Approving a vendor/venue case is one of
+        the triggers that can move its profile toward `active` (subject to
+        the onboarding-contract gate — see `PATCH /api/admin/vendors/{id}/status`).
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                note: { type: string }
+      responses:
+        "200":
+          description: Decided.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile: { $ref: "#/components/schemas/KYCProfile" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Platform Config
+  /api/admin/config:
+    get:
+      tags: [Platform Config]
+      operationId: HandleAdminGetConfig
+      summary: Read the website configuration
+      description: Requires an admin session (read access is broader than `admin.config.manage`; any authenticated admin may read). The public mirror is `GET /api/config`.
+      responses:
+        "200":
+          description: Current site configuration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteConfig" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    put:
+      tags: [Platform Config]
+      operationId: HandleAdminPutConfig
+      summary: Replace the website configuration
+      description: Requires `admin.config.manage`. Full replace — omitted fields clear to empty/zero.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PutConfigRequest" }
+      responses:
+        "200":
+          description: Updated configuration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Admins & Roles
+  /api/admin/admins:
+    get:
+      tags: [Admins & Roles]
+      operationId: HandleListAdmins
+      summary: List staff accounts
+      description: Requires `admin.admins.manage`.
+      responses:
+        "200":
+          description: Admins.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  admins:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Admins & Roles]
+      operationId: HandleCreateAdmin
+      summary: Onboard a staff account
+      description: Requires `admin.admins.manage`. Super-admin-only in practice (every verb on this resource is).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { id: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/admins/{id}/status:
+    patch:
+      tags: [Admins & Roles]
+      operationId: HandleSetAdminStatus
+      summary: Suspend or reactivate a staff account
+      description: Requires `admin.admins.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties: { status: { type: string } }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { id: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/admins/{id}:
+    delete:
+      tags: [Admins & Roles]
+      operationId: HandleDeleteAdmin
+      summary: Remove a staff account
+      description: Requires `admin.admins.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/admins/{id}/roles:
+    get:
+      tags: [Admins & Roles]
+      operationId: HandleListAdminRoles
+      summary: List a staff account's roles
+      description: Requires `admin.admins.manage` or `admin.roles.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Roles.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items: { $ref: "#/components/schemas/Role" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Admins & Roles]
+      operationId: HandleAssignAdminRole
+      summary: Grant a role to a staff account
+      description: Requires `admin.roles.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleId]
+              properties: { roleId: { type: string } }
+      responses:
+        "200":
+          description: Granted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { adminId: { type: string }, roleId: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/admins/{id}/roles/{roleId}:
+    delete:
+      tags: [Admins & Roles]
+      operationId: HandleRemoveAdminRole
+      summary: Revoke a role from a staff account
+      description: Requires `admin.roles.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/roles:
+    get:
+      tags: [Admins & Roles]
+      operationId: HandleListRoles
+      summary: List the role catalog
+      description: Requires `admin.roles.manage`.
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string }
+          description: Optional filter (e.g. `platform`, `organizer`, `vendor`, `venue`). "" lists every scope.
+      responses:
+        "200":
+          description: Roles.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items: { $ref: "#/components/schemas/Role" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Admins & Roles]
+      operationId: HandleCreateRole
+      summary: Add a catalog role
+      description: Requires `admin.roles.manage`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scope]
+              properties:
+                name: { type: string }
+                scope: { type: string }
+                description: { type: string }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { id: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/permissions:
+    get:
+      tags: [Admins & Roles]
+      operationId: HandleListPermissions
+      summary: List the permission catalog
+      description: Requires `admin.roles.manage`.
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string }
+          description: Optional filter. "" lists every scope.
+      responses:
+        "200":
+          description: Permissions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Permission" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Admins & Roles]
+      operationId: HandleCreatePermission
+      summary: Add a catalog permission
+      description: Requires `admin.roles.manage`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scope]
+              properties:
+                name: { type: string }
+                scope: { type: string }
+                description: { type: string }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { id: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/roles/{roleId}/permissions:
+    post:
+      tags: [Admins & Roles]
+      operationId: HandleAssignPermission
+      summary: Grant a permission to a role
+      description: Requires `admin.roles.manage`.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissionId]
+              properties: { permissionId: { type: string } }
+      responses:
+        "200":
+          description: Granted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { roleId: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/roles/{roleId}/permissions/{permissionId}:
+    delete:
+      tags: [Admins & Roles]
+      operationId: HandleRemovePermission
+      summary: Revoke a permission from a role
+      description: Requires `admin.roles.manage`.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: permissionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Sponsors
+  /api/admin/sponsors/{sponsorId}:
+    patch:
+      tags: [Sponsors]
+      operationId: HandleAdminUpdateSponsor
+      summary: Admin override — edit any sponsor catalog entry
+      description: |
+        Same effect as the organizer's `PATCH /api/organizations/{id}/sponsors/{sponsorId}`
+        (documented in the Organization API spec) but admin-scoped, bypassing
+        the creator-owns-it check events applies to organizer calls.
+      parameters:
+        - name: sponsorId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                logoUrl: { type: string, format: uri }
+                websiteUrl: { type: string, format: uri }
+      responses:
+        "200":
+          description: Updated sponsor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sponsor" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    delete:
+      tags: [Sponsors]
+      operationId: HandleAdminDeleteSponsor
+      summary: Admin override — delete any sponsor catalog entry
+      parameters:
+        - name: sponsorId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Feature Flags
+  /api/admin/feature-flags:
+    get:
+      tags: [Feature Flags]
+      operationId: HandleListAdminFlags
+      summary: List the flag registry with global defaults
+      description: Requires `admin.config.manage`.
+      responses:
+        "200":
+          description: Flags.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flags:
+                    type: array
+                    items: { $ref: "#/components/schemas/Flag" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/feature-flags/{flag}:
+    put:
+      tags: [Feature Flags]
+      operationId: HandleSetAdminFlag
+      summary: Flip a flag's global default
+      description: |
+        Requires `admin.config.manage`. This sets the platform-wide default
+        only — it does not override a scope (org/vendor/venue/account) that
+        already has its own override via the organization-scoped
+        `PUT /api/organizations/{id}/feature-flags/{flag}` (Organization API spec).
+      parameters:
+        - name: flag
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties: { enabled: { type: boolean } }
+      responses:
+        "200":
+          description: Updated flag.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flag" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Catalogs
+  /api/admin/countries:
+    get:
+      tags: [Catalogs]
+      operationId: HandleAdminListCountries
+      summary: List every supported country, enabled or not
+      description: Requires an admin session. The public mirror (`GET /api/v1/countries`) lists enabled-only.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Countries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  countries:
+                    type: array
+                    items: { $ref: "#/components/schemas/SupportedCountry" }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Catalogs]
+      operationId: HandleAdminCreateCountry
+      summary: Add a supported country
+      description: Requires `admin.config.manage`. `code` is an immutable ISO 3166-1 alpha-2 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code: { type: string, example: GH }
+                name: { type: string }
+                enabled: { type: boolean }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportedCountry" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/countries/{code}:
+    patch:
+      tags: [Catalogs]
+      operationId: HandleAdminUpdateCountry
+      summary: Rename or enable/disable a country
+      description: Requires `admin.config.manage`. `enabled` is required (400 if omitted). Disabling never invalidates existing references.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                name: { type: string }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportedCountry" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/countries/{code}/subdivisions:
+    get:
+      tags: [Catalogs]
+      operationId: HandleAdminListSubdivisions
+      summary: List a country's subdivisions, enabled or not
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Subdivisions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subdivisions:
+                    type: array
+                    items: { $ref: "#/components/schemas/SupportedSubdivision" }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Catalogs]
+      operationId: HandleAdminCreateSubdivision
+      summary: Add an ISO 3166-2 subdivision under a country
+      description: Requires `admin.config.manage`. None are seeded; add them before tax rules need them.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+          description: The country code (ISO 3166-1 alpha-2) subdivisions are added under.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code: { type: string, example: GH-AA, description: "Full ISO 3166-2 code." }
+                name: { type: string }
+                enabled: { type: boolean }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportedSubdivision" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/subdivisions/{code}:
+    patch:
+      tags: [Catalogs]
+      operationId: HandleAdminUpdateSubdivision
+      summary: Rename or enable/disable a subdivision
+      description: Requires `admin.config.manage`. `enabled` is required (400 if omitted).
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                name: { type: string }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportedSubdivision" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/distribution-channels:
+    get:
+      tags: [Catalogs]
+      operationId: HandleAdminListDistributionChannels
+      summary: List the distribution-channel catalog
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Channels.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  distributionChannels:
+                    type: array
+                    items: { $ref: "#/components/schemas/DistributionChannel" }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Catalogs]
+      operationId: HandleAdminCreateDistributionChannel
+      summary: Add a distribution channel
+      description: Requires `admin.config.manage`. `key` is an immutable identifier; `adapterType` is `website | ussd | whatsapp`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, displayName, adapterType]
+              properties:
+                key: { type: string }
+                displayName: { type: string }
+                adapterType: { type: string, enum: [website, ussd, whatsapp] }
+                configRef: { type: string, description: Non-secret deployment configuration reference. }
+                enabled: { type: boolean }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionChannel" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/distribution-channels/{key}:
+    patch:
+      tags: [Catalogs]
+      operationId: HandleAdminUpdateDistributionChannel
+      summary: Update a distribution channel
+      description: Requires `admin.config.manage`. `key` and `adapterType` are immutable; `enabled` is required (400 if omitted).
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                displayName: { type: string }
+                configRef: { type: string }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionChannel" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/event-categories:
+    get:
+      tags: [Catalogs]
+      operationId: HandleAdminListEventCategories
+      summary: List every event category, including disabled
+      description: The public mirror (`GET /api/v1/event-categories`) lists active-only.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Categories.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items: { $ref: "#/components/schemas/EventCategory" }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Catalogs]
+      operationId: HandleAdminCreateEventCategory
+      summary: Add an event category
+      description: Requires `admin.config.manage`. `slug` is derived from `name` server-side and is thereafter immutable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventCategory" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/event-categories/{categoryId}:
+    patch:
+      tags: [Catalogs]
+      operationId: HandleAdminUpdateEventCategory
+      summary: Rename, redescribe, or enable/disable a category
+      description: |
+        Requires `admin.config.manage`. `categoryId` is a positive integer
+        (400 otherwise). `active` is required (400 if omitted). A disabled
+        category stays valid on events that already use it but cannot be
+        newly assigned.
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                active: { type: boolean }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventCategory" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Tax & Commerce
+  /api/admin/tax-rules:
+    get:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminListTaxRules
+      summary: List tax rules
+      description: Requires `admin.config.manage` (read also via `admin.config.read`).
+      parameters:
+        - name: country
+          in: query
+          schema: { type: string }
+          description: ISO 3166-1 alpha-2 filter; omit for every country.
+      responses:
+        "200":
+          description: Tax rules.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taxRules:
+                    type: array
+                    items: { $ref: "#/components/schemas/TaxRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminCreateTaxRule
+      summary: Add a tax rule
+      description: |
+        Requires `admin.config.manage`. Rules are effective-dated
+        (`effectiveFrom`, optional `effectiveTo`, unix seconds, half-open) and
+        refuse to overlap another rule in the same scope (country/subdivision/
+        supply kind/category/component) — 409 `effective_range_overlap`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaxRule" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaxRule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/tax-rules/{id}:
+    put:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminUpdateTaxRule
+      summary: Replace a tax rule's terms as a new version
+      description: Requires `admin.config.manage`. Bumps `version` and keeps history; prior versions remain referenced by order snapshots.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaxRule" }
+      responses:
+        "200":
+          description: Updated (new version).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaxRule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/fee-rules:
+    get:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminListFeeRules
+      summary: List platform-fee rules
+      parameters:
+        - name: country
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Fee rules.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feeRules:
+                    type: array
+                    items: { $ref: "#/components/schemas/FeeRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminCreateFeeRule
+      summary: Add a platform-fee rule
+      description: Requires `admin.config.manage`. Effective-dated, half-open, refuses overlap in scope (409 `effective_range_overlap`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeeRule" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeeRule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/fee-rules/{id}:
+    put:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminUpdateFeeRule
+      summary: Replace a fee rule's terms as a new version
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeeRule" }
+      responses:
+        "200":
+          description: Updated (new version).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeeRule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/commerce-settings:
+    get:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminGetCommerceSettings
+      summary: Get the platform default fee payer
+      responses:
+        "200":
+          description: Settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommerceSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    put:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminSetCommerceSettings
+      summary: Set the platform default fee payer
+      description: Requires `admin.config.manage`. Applies to orders calculated afterwards only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommerceSettings" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommerceSettings" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{id}/commerce-profile:
+    get:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminGetOrgCommerceProfile
+      summary: View an organization's fee-payer override and tax profile
+      description: Requires an admin session (read also via `admin.config.read`). The organizer's own equivalent is `GET /api/organizations/{id}/commerce-profile` (Organization API spec).
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgCommerceProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{id}/tax-exemptions/review:
+    post:
+      tags: [Tax & Commerce]
+      operationId: HandleAdminReviewTaxExemption
+      summary: Approve or reject an organization's tax-exemption evidence
+      description: Requires `admin.kyc.review`. New or changed exemption evidence starts `pending` until reviewed here.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [country, status]
+              properties:
+                country: { type: string }
+                subdivision: { type: string }
+                status: { type: string, enum: [approved, rejected] }
+      responses:
+        "200":
+          description: Updated profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgCommerceProfile" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Payouts
+  /api/admin/payouts/{id}:
+    get:
+      tags: [Payouts]
+      operationId: HandleAdminGetPayout
+      summary: Read any payout for admin tooling
+      description: Requires an admin session. Admins read across organizations — no org scoping check applies.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Payout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Vendors & Venues
+  /api/admin/vendors/{id}/status:
+    patch:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminSetVendorStatus
+      summary: Flip a vendor's status
+      description: |
+        Admin-only. When `onboarding_contracts` is enabled for the vendor (or
+        its country), setting `active` issues the platform contract instead
+        and the vendor becomes `pending_contract` (not listed, booked, or
+        paid) until Documents reports that contract executed and KYC still
+        passes — a direct `active` request in that state is 409, and
+        `pending_contract` cannot be set directly (400). A profile with no
+        verified managing organization, or whose organization has no
+        authorized signer, gets 409.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [pending_approval, active, suspended] }
+      responses:
+        "200":
+          description: Updated vendor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendors/{id}/tier:
+    patch:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminSetVendorTier
+      summary: Assign a vendor's directory tier
+      description: Admin-only.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tier]
+              properties:
+                tier: { type: string, enum: [normal, verified, partnered] }
+      responses:
+        "200":
+          description: Updated vendor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venues/{id}/status:
+    patch:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminSetVenueStatus
+      summary: Flip a venue's status
+      description: Same onboarding-contract gate as vendor status (see above), applied to venues; a venue must also be claimed.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [pending_approval, active, suspended] }
+      responses:
+        "200":
+          description: Updated venue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Venue" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venues:
+    post:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminCreateDirectoryVenue
+      summary: Create an unclaimed directory venue
+      description: |
+        Requires `admin.config.manage`, behind the `venue_claims` flag. Set
+        `confirmNotDuplicate: true` to force creation past a duplicate-name
+        warning (same name/city/country as an existing venue).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/CreateDirectoryVenueRequest"
+      responses:
+        "200":
+          description: "Not created — duplicate candidates returned (resend with confirmNotDuplicate: true)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateDirectoryVenueResponse" }
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateDirectoryVenueResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venues/{id}/ownership-history:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminVenueOwnershipHistory
+      summary: Get a venue's provenance and ownership event history
+      description: Requires `admin.kyc.review`. Append-only (`created`, `claim_approved`, `migrated`).
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Venue and its ownership events.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  venue: { $ref: "#/components/schemas/Venue" }
+                  events:
+                    type: array
+                    items: { $ref: "#/components/schemas/VenueOwnershipEvent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-claims:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminListVenueClaims
+      summary: List venue claims for review
+      description: Requires `admin.kyc.review`.
+      parameters:
+        - name: venueId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, approved, rejected] }
+      responses:
+        "200":
+          description: Claims.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  claims:
+                    type: array
+                    items: { $ref: "#/components/schemas/VenueClaim" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-claims/{claimId}/approve:
+    post:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminApproveVenueClaim
+      summary: Approve a venue claim
+      description: |
+        Requires `admin.kyc.review`. Atomically makes the claimant the owner,
+        rejects competing pending claims on the same venue, and opens the
+        claimant's venue KYC. The venue becomes `active` when KYB is already
+        approved with evidence, otherwise `pending_approval`. If the claim
+        named a `designatedOrgId`, that link is written as the venue's
+        contracting-party link (ADR-0044); a claim without one leaves the
+        venue in the profile→organization reconciliation queue.
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { note: { type: string } }
+      responses:
+        "200":
+          description: Approved — claim and the now-owned venue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  claim: { $ref: "#/components/schemas/VenueClaim" }
+                  venue: { $ref: "#/components/schemas/Venue" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-claims/{claimId}/reject:
+    post:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminRejectVenueClaim
+      summary: Reject a venue claim
+      description: Requires `admin.kyc.review`.
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { note: { type: string } }
+      responses:
+        "200":
+          description: Rejected claim.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  claim: { $ref: "#/components/schemas/VenueClaim" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-org-reconciliation:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminListVendorOrgReconciliation
+      summary: List vendor profiles whose managing organization is undecided
+      description: Requires `admin.documents.operations.manage`. ID order, default page size 50, max 200.
+      parameters:
+        - { $ref: "#/components/parameters/PageTokenCamel" }
+        - { $ref: "#/components/parameters/PageSizeCamel200" }
+      responses:
+        "200":
+          description: Queued vendors.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/VendorOrgReconciliation" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendors/{id}/managing-org:
+    post:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminResolveVendorOrgLink
+      summary: Record a vendor's managing organization
+      description: |
+        Requires `admin.documents.operations.manage`. `reason` is required
+        (400 otherwise). The owner account must manage that active vendor-type
+        organization (409 otherwise); already-linked-to-a-different-org is
+        409. Repeating the same decision is idempotent. Never changes the
+        vendor's status.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [managingOrgId, reason]
+              properties:
+                managingOrgId: { type: string }
+                reason: { type: string }
+      responses:
+        "200":
+          description: The vendor's party read.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResolveVendorPartyResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-org-reconciliation:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminListVenueOrgReconciliation
+      summary: List claimed venue profiles whose managing organization is undecided
+      description: Requires `admin.documents.operations.manage`. ID order, default page size 50, max 200.
+      parameters:
+        - { $ref: "#/components/parameters/PageTokenCamel" }
+        - { $ref: "#/components/parameters/PageSizeCamel200" }
+      responses:
+        "200":
+          description: Queued venues.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/VenueOrgReconciliation" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venues/{id}/managing-org:
+    post:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminResolveVenueOrgLink
+      summary: Record a claimed venue's managing organization
+      description: Same rules as the vendor equivalent above, applied to venues.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [managingOrgId, reason]
+              properties:
+                managingOrgId: { type: string }
+                reason: { type: string }
+      responses:
+        "200":
+          description: The venue's party read.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResolveVenuePartyResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Document Catalog
+  /api/admin/platform-legal-identities:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminListPlatformLegalIdentities
+      summary: List platform legal identities
+      description: Requires `admin.documents.legal_identities.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/DocPageSize" }
+        - { $ref: "#/components/parameters/DocPageToken" }
+      responses:
+        "200":
+          description: Identities.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identities:
+                    type: array
+                    items: { $ref: "#/components/schemas/PlatformLegalIdentity" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminCreatePlatformLegalIdentity
+      summary: Create a platform legal identity shell
+      description: Requires `admin.documents.legal_identities.manage`. `country` is `""` for a global identity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { country: { type: string } }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformLegalIdentity" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/platform-legal-identities/{id}/draft:
+    put:
+      tags: [Document Catalog]
+      operationId: HandleAdminSavePlatformLegalIdentityDraft
+      summary: Replace the identity's draft version
+      description: Requires `admin.documents.legal_identities.manage`. Replaces the open draft, or creates the next version when none is in draft.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                legalName: { type: string }
+                tradingName: { type: string }
+                registrationNumber: { type: string }
+                jurisdictionCountry: { type: string }
+                registeredAddress: { type: string }
+                effectiveFrom: { type: string, format: date-time }
+      responses:
+        "200":
+          description: The draft version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformLegalIdentityVersion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/platform-legal-identities/{id}/versions/{version}/publish:
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminPublishPlatformLegalIdentity
+      summary: Publish a draft version
+      description: |
+        Requires `admin.documents.legal_identities.manage`. Takes effect at
+        the later of the draft's `effectiveFrom` and now; closes the
+        identity's currently open published version at that instant.
+        409 `effective_range_overlap` or `invalid_version_state` on conflict.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - { $ref: "#/components/parameters/PathVersion" }
+      responses:
+        "200":
+          description: Published version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformLegalIdentityVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-clauses:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminListDocumentClauses
+      summary: List clauses
+      description: Requires `admin.documents.templates.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/DocPageSize" }
+        - { $ref: "#/components/parameters/DocPageToken" }
+      responses:
+        "200":
+          description: Clauses.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clauses:
+                    type: array
+                    items: { $ref: "#/components/schemas/Clause" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminCreateDocumentClause
+      summary: Create a clause shell
+      description: Requires `admin.documents.templates.manage`. `key` is an immutable identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties: { key: { type: string } }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Clause" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-clauses/{id}:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminGetDocumentClause
+      summary: Get a clause with every version
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: The clause.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Clause" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-clauses/{id}/draft:
+    put:
+      tags: [Document Catalog]
+      operationId: HandleAdminSaveDocumentClauseDraft
+      summary: Replace the clause's draft version
+      description: Requires `admin.documents.templates.manage`. Replaces the open draft, or creates the next version when none is in draft.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveClauseDraftRequest" }
+      responses:
+        "200":
+          description: The draft version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseVersion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-clauses/{id}/versions/{version}:
+    delete:
+      tags: [Document Catalog]
+      operationId: HandleAdminDeleteDocumentClauseDraft
+      summary: Delete a draft version
+      description: Requires `admin.documents.templates.manage`. Draft-only — 409 `invalid_version_state` on a published/retired version.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - { $ref: "#/components/parameters/PathVersion" }
+      responses:
+        "200": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-clauses/{id}/versions/{version}/publish:
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminPublishDocumentClause
+      summary: Publish a draft clause version
+      description: Requires `admin.documents.templates.manage`. Takes effect at the later of `effectiveFrom` and now; 409 on overlap/invalid state.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - { $ref: "#/components/parameters/PathVersion" }
+      responses:
+        "200":
+          description: Published version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-clauses/{id}/versions/{version}/retire:
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminRetireDocumentClause
+      summary: Retire a published clause version
+      description: Requires `admin.documents.templates.manage`. 409 `invalid_version_state` on a non-published version.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - { $ref: "#/components/parameters/PathVersion" }
+      responses:
+        "200":
+          description: Retired version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/contract-templates:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminListContractTemplates
+      summary: List contract templates
+      description: Requires `admin.documents.templates.manage`. Covers platform-party templates and organizer defaults.
+      parameters:
+        - { $ref: "#/components/parameters/DocPageSize" }
+        - { $ref: "#/components/parameters/DocPageToken" }
+        - name: relationship
+          in: query
+          schema: { type: string, enum: [platform_vendor, platform_venue, organizer_vendor, organizer_venue] }
+      responses:
+        "200":
+          description: Templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templates:
+                    type: array
+                    items: { $ref: "#/components/schemas/ContractTemplate" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminCreateContractTemplate
+      summary: Create a contract template shell
+      description: Requires `admin.documents.templates.manage`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, relationship]
+              properties:
+                name: { type: string }
+                relationship: { type: string, enum: [platform_vendor, platform_venue, organizer_vendor, organizer_venue] }
+                country: { type: string }
+                category: { type: string }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractTemplate" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/contract-templates/{id}:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminGetContractTemplate
+      summary: Get a contract template with every version
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: The template.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractTemplate" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/contract-templates/{id}/draft:
+    put:
+      tags: [Document Catalog]
+      operationId: HandleAdminSaveContractTemplateDraft
+      summary: Replace the template's draft version
+      description: Requires `admin.documents.templates.manage`. Replaces the open draft, or creates the next version when none is in draft.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clauses:
+                  type: array
+                  items: { $ref: "#/components/schemas/TemplateClause" }
+                effectiveFrom: { type: string, format: date-time }
+                effectiveTo: { type: string, format: date-time }
+      responses:
+        "200":
+          description: The draft version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateVersion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/contract-templates/{id}/versions/{version}:
+    delete:
+      tags: [Document Catalog]
+      operationId: HandleAdminDeleteContractTemplateDraft
+      summary: Delete a draft template version
+      description: Requires `admin.documents.templates.manage`. Draft-only (409 `invalid_version_state` otherwise).
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - { $ref: "#/components/parameters/PathVersion" }
+      responses:
+        "200": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/contract-templates/{id}/versions/{version}/publish:
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminPublishContractTemplate
+      summary: Publish a draft template version
+      description: |
+        Requires `admin.documents.templates.manage`. A template must be
+        publishable (every required clause present, etc.) — 409
+        `template_not_publishable` otherwise; 409 `effective_range_overlap`
+        on a conflicting effective window.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - { $ref: "#/components/parameters/PathVersion" }
+      responses:
+        "200":
+          description: Published version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/contract-templates/{id}/versions/{version}/retire:
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminRetireContractTemplate
+      summary: Retire a published template version
+      description: Requires `admin.documents.templates.manage`. 409 `invalid_version_state` on a non-published version.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+        - { $ref: "#/components/parameters/PathVersion" }
+      responses:
+        "200":
+          description: Retired version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-settings:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminGetDocumentSettings
+      summary: Get the platform's signing-window settings
+      responses:
+        "200":
+          description: Settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-settings/signing-windows:
+    put:
+      tags: [Document Catalog]
+      operationId: HandleAdminSetSigningWindow
+      summary: Create or update a platform signing-window rule
+      description: Requires `admin.documents.templates.manage`. `expectedRevision` 0 creates; otherwise it must match the current row (409 `stale_revision` on mismatch).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [relationship, hours]
+              properties:
+                relationship: { type: string }
+                country: { type: string, description: "\"\" = every country." }
+                hours: { type: integer }
+                expectedRevision: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: The signing-window row.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SigningWindow" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    delete:
+      tags: [Document Catalog]
+      operationId: HandleAdminDeleteSigningWindow
+      summary: Delete a platform signing-window rule
+      description: |
+        Requires `admin.documents.templates.manage`. Unlike the PUT above,
+        this reads its arguments from the **query string**, not a JSON body
+        (`relationship`, `country`, `expected_revision` — note the snake_case
+        here, unlike the PUT body's camelCase).
+      parameters:
+        - name: relationship
+          in: query
+          required: true
+          schema: { type: string }
+        - name: country
+          in: query
+          schema: { type: string }
+        - name: expected_revision
+          in: query
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "200": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-artifacts:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminListDocumentArtifacts
+      summary: List document artifacts
+      description: Requires `admin.documents.evidence.read`.
+      parameters:
+        - name: owner_type
+          in: query
+          schema: { type: string, enum: [contract_revision, invoice] }
+        - name: owner_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Artifacts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifacts:
+                    type: array
+                    items: { $ref: "#/components/schemas/Artifact" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-artifacts/{id}/download:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminDownloadDocumentArtifact
+      summary: Get a short-lived download URL for a stored artifact
+      description: Requires `admin.documents.evidence.read`. The URL expires after five minutes; each issued link is logged.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Download descriptor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArtifactDownload" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-artifacts/{id}/legal-hold:
+    put:
+      tags: [Document Catalog]
+      operationId: HandleAdminSetDocumentArtifactHold
+      summary: Place or release a legal hold on an artifact
+      description: Requires `admin.documents.operations.manage`. `reason` is required when placing a hold (400 otherwise).
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hold]
+              properties:
+                hold: { type: boolean }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Updated artifact.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Artifact" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-artifacts/{id}/tombstone:
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminTombstoneDocumentArtifact
+      summary: Tombstone an artifact (queue it for deletion)
+      description: |
+        Requires `admin.documents.operations.manage`. `reason` is required
+        (400 otherwise). Refused while the artifact is under legal hold
+        (409 `legal_hold`) or still within its retention period
+        (409 `retention_active`).
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: { reason: { type: string } }
+      responses:
+        "200":
+          description: Tombstoned artifact.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Artifact" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-retention-policies:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminListDocumentRetentionPolicies
+      summary: List retention policies
+      description: Requires `admin.documents.operations.manage`.
+      responses:
+        "200":
+          description: Policies.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: array
+                    items: { $ref: "#/components/schemas/RetentionPolicy" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    put:
+      tags: [Document Catalog]
+      operationId: HandleAdminSetDocumentRetentionPolicy
+      summary: Create or update a retention policy
+      description: Requires `admin.documents.operations.manage`. `expectedRevision` 0 creates; otherwise it must match (409 `stale_revision` on mismatch).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documentType, retainDays]
+              properties:
+                country: { type: string, description: "\"\" = default." }
+                documentType: { type: string }
+                retainDays: { type: integer }
+                legalBasis: { type: string }
+                expectedRevision: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: The policy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetentionPolicy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-render-jobs:
+    get:
+      tags: [Document Catalog]
+      operationId: HandleAdminListDocumentRenderJobs
+      summary: List render jobs
+      description: Requires `admin.documents.operations.manage`.
+      parameters:
+        - { $ref: "#/components/parameters/DocPageSize" }
+        - { $ref: "#/components/parameters/DocPageToken" }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, done, dead] }
+      responses:
+        "200":
+          description: Render jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/RenderJob" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-render-jobs/{id}/retry:
+    post:
+      tags: [Document Catalog]
+      operationId: HandleAdminRetryDocumentRenderJob
+      summary: Revive a dead-lettered render job
+      description: Requires `admin.documents.operations.manage`. `reason` is recorded with the retry.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { reason: { type: string } }
+      responses:
+        "200":
+          description: The job, re-queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenderJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Document Operations
+  /api/admin/document-operations/contracts/{contractId}:
+    get:
+      tags: [Document Operations]
+      operationId: HandleAdminGetDocumentContract
+      summary: Inspect any contract
+      description: Requires `admin.documents.operations.manage`. Unlike the party routes, this is not scoped to one organization.
+      parameters:
+        - { $ref: "#/components/parameters/PathContractId" }
+      responses:
+        "200":
+          description: The contract.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-operations/contracts/{contractId}/download:
+    get:
+      tags: [Document Operations]
+      operationId: HandleAdminDownloadDocumentContract
+      summary: Get a short-lived download link for any contract's rendered document
+      description: Requires `admin.documents.operations.manage`. Same semantics as the party-scoped download route (see the Organization API spec's "Contracts" section) but unrestricted by organization.
+      parameters:
+        - { $ref: "#/components/parameters/PathContractId" }
+        - { $ref: "#/components/parameters/QueryDocument" }
+        - { $ref: "#/components/parameters/QueryFormat" }
+        - { $ref: "#/components/parameters/QueryRevisionId" }
+      responses:
+        "200":
+          description: Download descriptor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArtifactDownload" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-operations/contracts/{contractId}/resolve-blocked:
+    post:
+      tags: [Document Operations]
+      operationId: HandleAdminResolveBlockedContract
+      summary: Resolve a signature_blocked contract (admin path)
+      description: |
+        Requires `admin.documents.operations.manage`. `cancel` withdraws the
+        contract; `replace_revision` issues a revision of identical content
+        whose signer sets are the parties' current authorized signers (409
+        if none is feasible), superseding the blocked revision's signatures.
+        Nothing is ever marked signed; `reason` is required and audited.
+        Idempotent by `operationId`.
+      parameters:
+        - { $ref: "#/components/parameters/PathContractId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResolveBlockedContractRequest" }
+      responses:
+        "200":
+          description: Resolved contract.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-operations/lifecycle-events:
+    get:
+      tags: [Document Operations]
+      operationId: HandleAdminListDocumentLifecycleEvents
+      summary: List contract lifecycle delivery events
+      description: |
+        Requires `admin.documents.operations.manage`. Documents delivers each
+        contract fact (issued, revised, executed, declined, expired,
+        withdrawn, terminated, …) to the owning Vendors/Venues service, in
+        order per contract. Oldest first.
+      parameters:
+        - { $ref: "#/components/parameters/DocPageSize" }
+        - { $ref: "#/components/parameters/DocPageToken" }
+        - name: state
+          in: query
+          schema: { type: string, enum: [pending, dead, delivered] }
+        - name: contract_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Events.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: "#/components/schemas/LifecycleEvent" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-operations/lifecycle-events/{eventId}:
+    get:
+      tags: [Document Operations]
+      operationId: HandleAdminGetDocumentLifecycleEvent
+      summary: Inspect one lifecycle event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The event.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LifecycleEvent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-operations/lifecycle-events/{eventId}/retry:
+    post:
+      tags: [Document Operations]
+      operationId: HandleAdminRetryDocumentLifecycleEvent
+      summary: Return a dead-lettered lifecycle event to delivery
+      description: |
+        Requires `admin.documents.operations.manage`. `reason` is required
+        and audited. Never changes the event's facts. 409 on a `pending` or
+        already-`delivered` (i.e. non-`dead`) event.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: { reason: { type: string } }
+      responses:
+        "200":
+          description: The event, re-queued for delivery.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LifecycleEvent" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-operations/render-jobs:
+    get:
+      tags: [Document Operations]
+      operationId: HandleAdminListDocumentOperationRenderJobs
+      summary: List render jobs (operations console)
+      description: Same shape as `GET /api/admin/document-render-jobs`; both exist for console navigation.
+      parameters:
+        - { $ref: "#/components/parameters/DocPageSize" }
+        - { $ref: "#/components/parameters/DocPageToken" }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, done, dead] }
+      responses:
+        "200":
+          description: Render jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/RenderJob" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/document-operations/render-jobs/{jobId}/retry:
+    post:
+      tags: [Document Operations]
+      operationId: HandleAdminRetryDocumentOperationRenderJob
+      summary: Revive a dead-lettered render job (operations console)
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { reason: { type: string } }
+      responses:
+        "200":
+          description: The job, re-queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenderJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  # ---------------------------------------------------------------- Contract Backfills
+  /api/admin/vendor-contract-backfills:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminStartVendorContractBackfill
+      summary: Start a retroactive vendor onboarding-contract backfill
+      description: |
+        Requires `admin.documents.operations.manage`. `reason` is required.
+        Only one job per service (vendors or venues) may be `running` or
+        `paused` at a time — 409 otherwise. A background worker walks active
+        vendors without a platform contract, in ID order, issuing each under
+        the canonical `onboarding:vendor:<id>` operation; it never changes
+        the vendor's status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                country: { type: string, description: "ISO 3166-1 alpha-2; \"\" = every country." }
+                reason: { type: string }
+      responses:
+        "201":
+          description: Job started.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    get:
+      tags: [Contract Backfills]
+      operationId: HandleAdminListVendorContractBackfills
+      summary: List vendor contract-backfill jobs
+      description: Requires `admin.documents.operations.manage`. Newest first.
+      parameters:
+        - { $ref: "#/components/parameters/PageTokenCamel" }
+        - { $ref: "#/components/parameters/PageSizeCamel200" }
+      responses:
+        "200":
+          description: Jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/ContractBackfillJob" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-contract-backfills/{jobId}:
+    get:
+      tags: [Contract Backfills]
+      operationId: HandleAdminGetVendorContractBackfill
+      summary: Get one vendor contract-backfill job's progress
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-contract-backfills/{jobId}/pause:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminPauseVendorContractBackfill
+      summary: Pause a running vendor backfill job
+      description: 409 when the job isn't in a pausable state.
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job, paused.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-contract-backfills/{jobId}/resume:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminResumeVendorContractBackfill
+      summary: Resume a paused vendor backfill job
+      description: 409 when the job isn't in a resumable state.
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job, resumed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-contract-backfills/{jobId}/retry:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminRetryVendorContractBackfill
+      summary: Retry a vendor backfill job's failed profiles
+      description: Re-queues failed profiles and reopens a completed job. 409 when the job isn't in a retryable state.
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job, re-queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-contract-backfills/{jobId}/results:
+    get:
+      tags: [Contract Backfills]
+      operationId: HandleAdminListVendorContractBackfillResults
+      summary: List a vendor backfill job's per-vendor results
+      description: |
+        By vendor ID. Skipped outcome details: `not_found`, `not_active`,
+        `unclaimed`, `already_contracted`, `gate_off`, `changed_during_backfill`.
+        Failures (`no_authorized_signer: …`, Documents errors) need action
+        then a job-level retry.
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+        - name: outcome
+          in: query
+          schema: { type: string, enum: [pending, issued, skipped, failed] }
+        - { $ref: "#/components/parameters/PageTokenCamel" }
+        - { $ref: "#/components/parameters/PageSizeCamel200" }
+      responses:
+        "200":
+          description: Results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/VendorContractBackfillResult" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-contract-backfills:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminStartVenueContractBackfill
+      summary: Start a retroactive venue onboarding-contract backfill
+      description: |
+        Same rules as the vendor backfill above, applied to venues. Venues
+        must also be claimed to be eligible; issues under
+        `onboarding:venue:<id>`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                country: { type: string }
+                reason: { type: string }
+      responses:
+        "201":
+          description: Job started.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    get:
+      tags: [Contract Backfills]
+      operationId: HandleAdminListVenueContractBackfills
+      summary: List venue contract-backfill jobs
+      parameters:
+        - { $ref: "#/components/parameters/PageTokenCamel" }
+        - { $ref: "#/components/parameters/PageSizeCamel200" }
+      responses:
+        "200":
+          description: Jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/ContractBackfillJob" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-contract-backfills/{jobId}:
+    get:
+      tags: [Contract Backfills]
+      operationId: HandleAdminGetVenueContractBackfill
+      summary: Get one venue contract-backfill job's progress
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-contract-backfills/{jobId}/pause:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminPauseVenueContractBackfill
+      summary: Pause a running venue backfill job
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job, paused.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-contract-backfills/{jobId}/resume:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminResumeVenueContractBackfill
+      summary: Resume a paused venue backfill job
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job, resumed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-contract-backfills/{jobId}/retry:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminRetryVenueContractBackfill
+      summary: Retry a venue backfill job's failed profiles
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+      responses:
+        "200":
+          description: The job, re-queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractBackfillJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-contract-backfills/{jobId}/results:
+    get:
+      tags: [Contract Backfills]
+      operationId: HandleAdminListVenueContractBackfillResults
+      summary: List a venue backfill job's per-venue results
+      parameters:
+        - { $ref: "#/components/parameters/PathJobId" }
+        - name: outcome
+          in: query
+          schema: { type: string, enum: [pending, issued, skipped, failed] }
+        - { $ref: "#/components/parameters/PageTokenCamel" }
+        - { $ref: "#/components/parameters/PageSizeCamel200" }
+      responses:
+        "200":
+          description: Results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/VenueContractBackfillResult" }
+                  nextPageToken: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-contract-reconciliations:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminReconcileVendorContract
+      summary: Force an on-demand vendor/booking contract reconciliation
+      description: |
+        Requires `admin.documents.operations.manage`. Pass exactly one of
+        `bookingId` or `vendorId`. Vendors poll Documents' current facts for
+        every booking/platform contract still open five minutes past its
+        signing deadline and applies them by the same compare-and-set rules
+        as delivered lifecycle events; this endpoint does the same on demand.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bookingId: { type: string }
+                vendorId: { type: string }
+      responses:
+        "200":
+          description: Reconciliation result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileContractStateResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venue-contract-reconciliations:
+    post:
+      tags: [Contract Backfills]
+      operationId: HandleAdminReconcileVenueContract
+      summary: Force an on-demand venue/booking contract reconciliation
+      description: Same as the vendor equivalent above, applied to venues. Pass exactly one of `bookingId` or `venueId`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bookingId: { type: string }
+                venueId: { type: string }
+      responses:
+        "200":
+          description: Reconciliation result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileContractStateResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Session JWT with `kind: admin`, from `POST /api/admin/login`. An
+        `X-API-Key` on any route in this spec always resolves to `kind: user`
+        and is therefore rejected with 403 — admin access is JWT-only.
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    PathVersion:
+      name: version
+      in: path
+      required: true
+      schema: { type: integer }
+    PathJobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string }
+    PathContractId:
+      name: contractId
+      in: path
+      required: true
+      schema: { type: string }
+    QueryDocument:
+      name: document
+      in: query
+      schema: { type: string, enum: [contract, certificate] }
+    QueryFormat:
+      name: format
+      in: query
+      schema: { type: string, enum: [pdf, html] }
+    QueryRevisionId:
+      name: revision_id
+      in: query
+      schema: { type: string }
+      description: "\"\" = current revision. Note: snake_case, unlike most JSON bodies."
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 100, maximum: 500 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, default: 0 }
+    DocPageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, default: 50, maximum: 100 }
+      description: "Documents-catalog pagination uses snake_case query params."
+    DocPageToken:
+      name: page_token
+      in: query
+      schema: { type: string }
+    PageTokenCamel:
+      name: pageToken
+      in: query
+      schema: { type: string }
+      description: "Backfill/reconciliation pagination uses camelCase query params (unlike Documents-catalog lists)."
+    PageSizeCamel200:
+      name: pageSize
+      in: query
+      schema: { type: integer, default: 50, maximum: 200 }
+
+  responses:
+    BadRequest:
+      description: Malformed request (`InvalidArgument`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid credentials (`Unauthenticated`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not permitted — wrong `kind`, missing permission, or an API key on an admin route (`PermissionDenied`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such resource (`NotFound`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: State conflict — see the operation description for the specific typed `reason` values that apply here (`FailedPrecondition` / `AlreadyExists`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyRequests:
+      description: Rate-limited (`ResourceExhausted`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadGateway:
+      description: A backend service was unreachable (`Unavailable`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        reason: { type: string, description: "Structured conflict/validation reason, when applicable." }
+
+    # ---- Users / KYC
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        status: { type: string, enum: [guest, active, suspended] }
+        claimedAt: { type: string, format: date-time }
+        phoneVerified: { type: boolean }
+        emailVerified: { type: boolean }
+        createdVia: { type: string, description: Admin-only provenance field. }
+        createdByOrgId: { type: string, description: Admin-only provenance field. }
+    KYCDocument:
+      type: object
+      properties:
+        id: { type: string }
+        profileId: { type: string }
+        kind: { type: string }
+        refUrl: { type: string }
+    KYCProfile:
+      type: object
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        type: { type: string, enum: [organization, vendor, venue] }
+        status: { type: string }
+        submittedAt: { type: string, format: date-time }
+        decidedAt: { type: string, format: date-time }
+        decidedBy: { type: string }
+        note: { type: string }
+        documentCount: { type: integer }
+        country: { type: string }
+
+    # ---- Platform config / admins / roles
+    SiteConfig:
+      type: object
+      properties:
+        siteName: { type: string }
+        tagline: { type: string }
+        logoUrl: { type: string }
+        defaultCurrency: { type: string }
+        supportEmail: { type: string }
+        supportPhone: { type: string }
+        announcement: { type: string }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string }
+        calloutAllowedCategories:
+          type: array
+          items: { type: string }
+    PutConfigRequest:
+      type: object
+      properties:
+        siteName: { type: string }
+        tagline: { type: string }
+        logoUrl: { type: string }
+        defaultCurrency: { type: string }
+        supportEmail: { type: string }
+        supportPhone: { type: string }
+        announcement: { type: string }
+        calloutAllowedCategories:
+          type: array
+          items: { type: string }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        status: { type: string }
+    Role:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        scope: { type: string }
+        description: { type: string }
+    Permission:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        scope: { type: string }
+        description: { type: string }
+    Flag:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        defaultEnabled: { type: boolean }
+
+    # ---- Sponsors
+    Sponsor:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        logoUrl: { type: string }
+        websiteUrl: { type: string }
+        createdByOrgId: { type: string }
+        createdAt: { type: integer, format: int64 }
+
+    # ---- Catalogs
+    SupportedCountry:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        enabled: { type: boolean }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    SupportedSubdivision:
+      type: object
+      properties:
+        code: { type: string }
+        countryCode: { type: string }
+        name: { type: string }
+        enabled: { type: boolean }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    DistributionChannel:
+      type: object
+      properties:
+        key: { type: string }
+        displayName: { type: string }
+        adapterType: { type: string, enum: [website, ussd, whatsapp] }
+        configRef: { type: string }
+        enabled: { type: boolean }
+        adapterImplemented: { type: boolean }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    EventCategory:
+      type: object
+      properties:
+        id: { type: integer }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        active: { type: boolean }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+
+    # ---- Tax / commerce
+    TaxRule:
+      type: object
+      properties:
+        id: { type: string }
+        version: { type: integer, format: int64 }
+        country: { type: string }
+        subdivision: { type: string, description: "\"\" = country-wide." }
+        supplyKind: { type: string, enum: [physical, virtual, any] }
+        categoryId: { type: integer, description: "0 = every category." }
+        component: { type: string }
+        rateBasisPoints: { type: integer, format: int64 }
+        inclusive: { type: boolean }
+        requiresRegistration: { type: boolean }
+        exemptionHonored: { type: boolean }
+        remittedBy: { type: string, enum: [organizer, platform] }
+        effectiveFrom: { type: integer, format: int64, description: Unix seconds. }
+        effectiveTo: { type: integer, format: int64, description: "Unix seconds; 0 = open-ended." }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    FeeRule:
+      type: object
+      properties:
+        id: { type: string }
+        version: { type: integer, format: int64 }
+        country: { type: string }
+        currency: { type: string }
+        percentBasisPoints: { type: integer, format: int64 }
+        fixedPerTicketMinor: { type: integer, format: int64 }
+        fixedPerOrderMinor: { type: integer, format: int64 }
+        effectiveFrom: { type: integer, format: int64 }
+        effectiveTo: { type: integer, format: int64 }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    CommerceSettings:
+      type: object
+      properties:
+        defaultFeePayer: { type: string, enum: [attendee, organizer] }
+    TaxRegistration:
+      type: object
+      properties:
+        country: { type: string }
+        subdivision: { type: string }
+        registrationNumber: { type: string }
+    TaxExemption:
+      type: object
+      properties:
+        country: { type: string }
+        subdivision: { type: string }
+        evidenceRef: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+    OrgCommerceProfile:
+      type: object
+      properties:
+        orgId: { type: string }
+        feePayerOverride: { type: string, description: "\"\" = platform default." }
+        effectiveFeePayer: { type: string }
+        registrations:
+          type: array
+          items: { $ref: "#/components/schemas/TaxRegistration" }
+        exemptions:
+          type: array
+          items: { $ref: "#/components/schemas/TaxExemption" }
+
+    # ---- Payouts
+    Payout:
+      type: object
+      properties:
+        id: { type: string }
+        eventId: { type: string }
+        beneficiaryId: { type: string }
+        beneficiaryType: { type: string }
+        amountMinor: { type: integer, format: int64 }
+        currency: { type: string }
+        status: { type: string }
+        provider: { type: string }
+        providerRef: { type: string }
+        attempts: { type: integer }
+        scheduledFor: { type: integer, format: int64 }
+
+    # ---- Vendors / venues
+    Vendor:
+      type: object
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        businessName: { type: string }
+        contactName: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        status: { type: string }
+        tier: { type: string, enum: [normal, verified, partnered] }
+        category: { type: string }
+        city: { type: string }
+        country: { type: string }
+        description: { type: string }
+        heldPayoutAmount: { type: integer, format: int64 }
+        onboardingIncomplete: { type: boolean }
+    Venue:
+      type: object
+      properties:
+        id: { type: string }
+        ownerAccountId: { type: string, description: "\"\" while unclaimed." }
+        name: { type: string }
+        address: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer }
+        status: { type: string }
+        category: { type: string }
+        description: { type: string }
+        amenities:
+          type: array
+          items: { type: string }
+        claimed: { type: boolean }
+        createdVia: { type: string, enum: [self_registration, admin_directory, organizer_directory] }
+        createdByAccountId: { type: string }
+        createdByOrgId: { type: string }
+    CreateDirectoryVenueRequest:
+      type: object
+      required: [name, capacity]
+      properties:
+        name: { type: string }
+        address: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer }
+        category: { type: string }
+        description: { type: string }
+        amenities:
+          type: array
+          items: { type: string }
+        confirmNotDuplicate: { type: boolean }
+    VenueDirectoryEntry:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer }
+        claimed: { type: boolean }
+    CreateDirectoryVenueResponse:
+      type: object
+      properties:
+        created: { type: boolean }
+        venue: { $ref: "#/components/schemas/Venue" }
+        duplicateCandidates:
+          type: array
+          items: { $ref: "#/components/schemas/VenueDirectoryEntry" }
+    VenueOwnershipEvent:
+      type: object
+      properties:
+        id: { type: string }
+        fromAccountId: { type: string, description: "\"\" when previously unowned." }
+        toAccountId: { type: string }
+        reason: { type: string, enum: [created, claim_approved, migrated] }
+        claimId: { type: string }
+        actorId: { type: string }
+        at: { type: integer, format: int64 }
+    ClaimEvidence:
+      type: object
+      properties:
+        kind: { type: string, enum: [business_registration, lease_or_deed, utility_bill, photo_id, website_or_listing, other] }
+        refUrl: { type: string }
+        note: { type: string }
+    VenueClaim:
+      type: object
+      properties:
+        id: { type: string }
+        venueId: { type: string }
+        claimantAccountId: { type: string }
+        evidence:
+          type: array
+          items: { $ref: "#/components/schemas/ClaimEvidence" }
+        status: { type: string, enum: [pending, approved, rejected] }
+        submittedAt: { type: integer, format: int64 }
+        decidedAt: { type: integer, format: int64 }
+        decidedBy: { type: string }
+        decisionNote: { type: string }
+        designatedOrgId: { type: string }
+    VendorOrgReconciliation:
+      type: object
+      properties:
+        vendorId: { type: string }
+        ownerAccountId: { type: string }
+        businessName: { type: string }
+        queuedAt: { type: integer, format: int64 }
+    VenueOrgReconciliation:
+      type: object
+      properties:
+        venueId: { type: string }
+        ownerAccountId: { type: string }
+        name: { type: string }
+        queuedAt: { type: integer, format: int64 }
+    ResolveVendorPartyResponse:
+      type: object
+      properties:
+        vendorId: { type: string }
+        managingOrgId: { type: string, description: "\"\" = reconciliation pending." }
+        status: { type: string }
+        country: { type: string }
+        category: { type: string }
+    ResolveVenuePartyResponse:
+      type: object
+      properties:
+        venueId: { type: string }
+        managingOrgId: { type: string }
+        status: { type: string }
+        country: { type: string }
+        category: { type: string }
+        claimed: { type: boolean }
+
+    # ---- Documents: catalog
+    VariableRequirement:
+      type: object
+      properties:
+        name: { type: string }
+        required: { type: boolean }
+    PlatformLegalIdentityVersion:
+      type: object
+      properties:
+        identityId: { type: string }
+        version: { type: integer }
+        status: { type: string, enum: [draft, published] }
+        legalName: { type: string }
+        tradingName: { type: string }
+        registrationNumber: { type: string }
+        jurisdictionCountry: { type: string }
+        registeredAddress: { type: string }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time }
+        publishedBy: { type: string }
+        publishedAt: { type: string, format: date-time }
+    PlatformLegalIdentity:
+      type: object
+      properties:
+        id: { type: string }
+        country: { type: string, description: "\"\" = global." }
+        versions:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformLegalIdentityVersion" }
+    ClauseVersion:
+      type: object
+      properties:
+        clauseId: { type: string }
+        key: { type: string }
+        version: { type: integer }
+        status: { type: string, enum: [draft, published, retired] }
+        relationships:
+          type: array
+          items: { type: string }
+        countries:
+          type: array
+          items: { type: string }
+        categories:
+          type: array
+          items: { type: string }
+        title: { type: string }
+        body:
+          type: array
+          items: { type: string }
+        variables:
+          type: array
+          items: { $ref: "#/components/schemas/VariableRequirement" }
+        required: { type: boolean }
+        organizerMayUse: { type: boolean }
+        organizerMayOmit: { type: boolean }
+        organizerMayEdit: { type: boolean }
+        governingLawCountry: { type: string }
+        governingLawNote: { type: string }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time }
+        publishedBy: { type: string }
+        publishedAt: { type: string, format: date-time }
+    Clause:
+      type: object
+      properties:
+        id: { type: string }
+        key: { type: string }
+        versions:
+          type: array
+          items: { $ref: "#/components/schemas/ClauseVersion" }
+    SaveClauseDraftRequest:
+      type: object
+      properties:
+        relationships:
+          type: array
+          items: { type: string }
+        countries:
+          type: array
+          items: { type: string }
+        categories:
+          type: array
+          items: { type: string }
+        title: { type: string }
+        body:
+          type: array
+          items: { type: string }
+        variables:
+          type: array
+          items: { $ref: "#/components/schemas/VariableRequirement" }
+        required: { type: boolean }
+        organizerMayUse: { type: boolean }
+        organizerMayOmit: { type: boolean }
+        organizerMayEdit: { type: boolean }
+        governingLawCountry: { type: string }
+        governingLawNote: { type: string }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time }
+    TemplateClause:
+      type: object
+      properties:
+        position: { type: integer }
+        clauseId: { type: string }
+        clauseVersion: { type: integer }
+        bodyOverride:
+          type: array
+          items: { type: string }
+    TemplateVersion:
+      type: object
+      properties:
+        templateId: { type: string }
+        version: { type: integer }
+        status: { type: string }
+        clauses:
+          type: array
+          items: { $ref: "#/components/schemas/TemplateClause" }
+        variables:
+          type: array
+          items: { $ref: "#/components/schemas/VariableRequirement" }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time }
+        publishedBy: { type: string }
+        publishedAt: { type: string, format: date-time }
+    ContractTemplate:
+      type: object
+      properties:
+        id: { type: string }
+        ownerOrgId: { type: string, description: "\"\" = platform." }
+        name: { type: string }
+        relationship: { type: string }
+        country: { type: string }
+        category: { type: string }
+        clonedFromTemplateId: { type: string }
+        clonedFromVersion: { type: integer }
+        versions:
+          type: array
+          items: { $ref: "#/components/schemas/TemplateVersion" }
+        createdAt: { type: string, format: date-time }
+    SigningWindow:
+      type: object
+      properties:
+        relationship: { type: string }
+        country: { type: string, description: "\"\" = every country." }
+        hours: { type: integer }
+        revision: { type: integer, format: int64 }
+        updatedBy: { type: string }
+        updatedAt: { type: string, format: date-time }
+    DocumentSettings:
+      type: object
+      properties:
+        ownerOrgId: { type: string, description: "\"\" = platform." }
+        signingWindows:
+          type: array
+          items: { $ref: "#/components/schemas/SigningWindow" }
+    Artifact:
+      type: object
+      properties:
+        id: { type: string }
+        ownerType: { type: string }
+        ownerId: { type: string }
+        kind: { type: string, enum: [html, pdf, certificate_html, certificate_pdf] }
+        documentType: { type: string, enum: [contract, invoice, signature_certificate] }
+        country: { type: string }
+        contentType: { type: string }
+        contentHash: { type: string }
+        watermark: { type: string }
+        keyVersion: { type: string }
+        status: { type: string, enum: [pending, stored, tombstoned] }
+        sizeBytes: { type: integer, format: int64 }
+        sha256: { type: string }
+        retainUntil: { type: string, format: date-time, description: "\"\" = kept indefinitely." }
+        retentionBasis: { type: string }
+        legalHold: { type: boolean }
+        legalHoldReason: { type: string }
+        supersededBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        storedAt: { type: string, format: date-time }
+        tombstonedAt: { type: string, format: date-time }
+        tombstoneReason: { type: string }
+        deletedAt: { type: string, format: date-time }
+    ArtifactDownload:
+      type: object
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+        sha256: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+    RetentionPolicy:
+      type: object
+      properties:
+        country: { type: string, description: "\"\" = default." }
+        documentType: { type: string }
+        retainDays: { type: integer }
+        legalBasis: { type: string }
+        revision: { type: integer, format: int64 }
+        updatedBy: { type: string }
+        updatedAt: { type: string, format: date-time }
+    RenderJob:
+      type: object
+      properties:
+        id: { type: string }
+        ownerType: { type: string }
+        ownerId: { type: string }
+        documentType: { type: string }
+        status: { type: string, enum: [pending, done, dead] }
+        attempts: { type: integer }
+        nextAttemptAt: { type: string, format: date-time }
+        lastError: { type: string }
+        htmlArtifactId: { type: string }
+        pdfArtifactId: { type: string }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    LifecycleEvent:
+      type: object
+      properties:
+        id: { type: string }
+        eventType: { type: string }
+        contractId: { type: string }
+        revisionId: { type: string }
+        contractStatus: { type: string }
+        effectiveAt: { type: string, format: date-time }
+        causationId: { type: string }
+        relationship: { type: string }
+        profileKind: { type: string }
+        profileId: { type: string }
+        operationId: { type: string }
+        state: { type: string, enum: [pending, dead, delivered] }
+        attempts: { type: integer }
+        lastError: { type: string }
+        deliveryNote: { type: string }
+        nextAttemptAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        publishedAt: { type: string, format: date-time }
+        deadAt: { type: string, format: date-time }
+
+    # ---- Documents: contracts
+    ContractParty:
+      type: object
+      properties:
+        id: { type: string }
+        role: { type: string }
+        kind: { type: string }
+        organizationId: { type: string }
+        platformIdentityId: { type: string }
+        platformIdentityVersion: { type: integer }
+        legalKind: { type: string }
+        legalIdentityVersion: { type: integer, format: int64 }
+        legalName: { type: string }
+        tradingName: { type: string }
+        registrationNumber: { type: string }
+        jurisdictionCountry: { type: string }
+        registeredAddress: { type: string }
+        proprietorUserId: { type: string }
+        authorizationRevision: { type: integer, format: int64 }
+        policyRevision: { type: integer, format: int64 }
+    ContractSignatureRequirement:
+      type: object
+      properties:
+        partyId: { type: string }
+        threshold: { type: integer }
+        eligibleSignerCount: { type: integer }
+        platformAutomatic: { type: boolean }
+    ContractSignature:
+      type: object
+      properties:
+        id: { type: string }
+        attemptId: { type: string }
+        revisionId: { type: string }
+        partyId: { type: string }
+        signatureType: { type: string }
+        signerUserId: { type: string }
+        signerEntity: { type: string }
+        signerRole: { type: string }
+        method: { type: string }
+        contentHash: { type: string }
+        signedAt: { type: string, format: date-time }
+        ipCountry: { type: string }
+        consentTextVersion: { type: string }
+        status: { type: string }
+    ContractRevision:
+      type: object
+      properties:
+        id: { type: string }
+        revision: { type: integer }
+        basedOnRevisionId: { type: string }
+        status: { type: string }
+        contentHash: { type: string }
+        createdAt: { type: string, format: date-time }
+        signatureRequirements:
+          type: array
+          items: { $ref: "#/components/schemas/ContractSignatureRequirement" }
+        signatures:
+          type: array
+          items: { $ref: "#/components/schemas/ContractSignature" }
+    Contract:
+      type: object
+      properties:
+        id: { type: string }
+        operationId: { type: string }
+        relationship: { type: string }
+        country: { type: string }
+        category: { type: string }
+        profileKind: { type: string }
+        profileId: { type: string }
+        templateId: { type: string }
+        templateVersion: { type: integer }
+        status: { type: string }
+        currentRevision: { type: integer }
+        signingDeadline: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        executedAt: { type: string, format: date-time }
+        parties:
+          type: array
+          items: { $ref: "#/components/schemas/ContractParty" }
+        revisions:
+          type: array
+          items: { $ref: "#/components/schemas/ContractRevision" }
+    ResolveBlockedContractRequest:
+      type: object
+      required: [operationId, action, reason]
+      properties:
+        operationId: { type: string }
+        action: { type: string, enum: [cancel, replace_revision] }
+        reason: { type: string }
+
+    # ---- Contract backfills / reconciliation
+    ContractBackfillJob:
+      type: object
+      properties:
+        id: { type: string }
+        country: { type: string }
+        reason: { type: string }
+        createdBy: { type: string }
+        status: { type: string, enum: [running, paused, completed] }
+        cursor: { type: string, description: Last vendor/venue ID walked. }
+        pending: { type: integer }
+        issued: { type: integer }
+        skipped: { type: integer }
+        failed: { type: integer }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+        completedAt: { type: integer, format: int64, description: "0 while open." }
+    VendorContractBackfillResult:
+      type: object
+      properties:
+        vendorId: { type: string }
+        outcome: { type: string, enum: [pending, issued, skipped, failed] }
+        detail: { type: string }
+        contractId: { type: string }
+        attempts: { type: integer }
+        updatedAt: { type: integer, format: int64 }
+    VenueContractBackfillResult:
+      type: object
+      properties:
+        venueId: { type: string }
+        outcome: { type: string, enum: [pending, issued, skipped, failed] }
+        detail: { type: string }
+        contractId: { type: string }
+        attempts: { type: integer }
+        updatedAt: { type: integer, format: int64 }
+    ReconcileContractStateResponse:
+      type: object
+      properties:
+        applied: { type: boolean }
+        status: { type: string, description: The booking's or vendor's/venue's status afterwards. }
+        contractStatus: { type: string, description: "Documents' current contract status." }
