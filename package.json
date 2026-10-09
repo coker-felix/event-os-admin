@@ -7,9 +7,9 @@
     "node": ">=20.19.0"
   },
   "scripts": {
-    "dev": "vite --config apps/vite.config.ts apps",
-    "build": "vite build --config apps/vite.config.ts apps && tsc --noEmit -p apps/tsconfig.json",
-    "typecheck": "vite build --config apps/vite.config.ts --emptyOutDir false apps && tsc --noEmit -p apps/tsconfig.json --pretty",
+    "dev": "vite",
+    "build": "vite build && tsc --noEmit",
+    "typecheck": "vite build --emptyOutDir false && tsc --noEmit --pretty",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium"
   },

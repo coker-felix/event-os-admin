@@ -4,4 +4,4 @@ dist/
 playwright-report/
 test-results/
 *.tsbuildinfo
-apps/src/routeTree.gen.ts
+app/src/routeTree.gen.ts
