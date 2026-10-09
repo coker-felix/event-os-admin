@@ -8,11 +8,16 @@ export default defineConfig({
     tanstackRouter({
       target: 'react',
       autoCodeSplitting: true,
-      routesDirectory: './app/src/routes',
-      generatedRouteTree: './app/src/routeTree.gen.ts',
+      routesDirectory: './src/routes',
+      generatedRouteTree: './src/routeTree.gen.ts',
     }),
     react(),
     tailwindcss(),
   ],
+  resolve: {
+    alias: {
+      '@': new URL('./src', import.meta.url).pathname,
+    },
+  },
   server: { port: 5173, strictPort: true },
 })
