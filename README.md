@@ -1,6 +1,6 @@
 # Event OS Admin
 
-Admin dashboard monorepo built with React 19, Vite 6, Tailwind CSS v4, TanStack Router, Query, and Table, Zustand, and Playwright. The workspace uses pnpm.
+Admin dashboard monorepo built with React 19, Vite 6, Tailwind CSS v4, TanStack Router, Query, and Table, Zustand, and Playwright. The repository root owns the pnpm manifest and lockfile; Vite app source lives under `apps/`.
 
 ## Getting started
 
@@ -11,11 +11,10 @@ pnpm dev
 
 The admin app runs at the URL printed by Vite (usually `http://localhost:5173`).
 
-## Workspace layout
+## Repository layout
 
 ```text
 apps/
-  package.json           Dashboard workspace package and dependencies
   index.html              Vite document entry
   vite.config.ts          Vite, Tailwind, and TanStack Router plugins
   src/
@@ -40,8 +39,8 @@ Route files live under `apps/src/routes`; TanStack Router's Vite plugin generate
 
 ```sh
 pnpm dev             # Start the admin app
-pnpm build           # Build all apps
-pnpm typecheck       # Type-check the workspace
+pnpm build           # Build the dashboard
+pnpm typecheck       # Type-check the dashboard
 pnpm e2e             # Run Playwright tests (requires installed browser)
 pnpm e2e:install     # Install Playwright Chromium
 ```
