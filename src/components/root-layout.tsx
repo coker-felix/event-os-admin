@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSidebarStore } from '../stores/sidebar-store'
 import { useAuth } from '../contexts/auth'
 import type { AdminNavigationModule } from '@/types/admin-modules'
@@ -65,11 +65,14 @@ const navigation: readonly AdminNavigationModule[] = [
 ]
 
 export function RootLayout() {
-  const { signOut } = useAuth()
+  const { session, signOut } = useAuth()
   const navigate = useNavigate()
   const collapsed = useSidebarStore((state) => state.collapsed)
   const toggle = useSidebarStore((state) => state.toggle)
   const pathname = useRouterState({ select: (state) => state.location.pathname })
+  useEffect(() => {
+    if (!session) void navigate({ to: '/signin', search: { redirect: pathname || '/app' } as never })
+  }, [navigate, pathname, session])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     accounts: true, staff: true, platform: true, commerce: true, marketplace: true, documents: true,
   })

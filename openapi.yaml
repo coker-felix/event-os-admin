@@ -8,10 +8,13 @@ info:
     oversight, and the Documents contract-catalog/operations console.
 
     ## Authentication
-    Every route below except `POST /api/admin/login` requires a **Bearer JWT**
-    whose claims carry `kind: admin` (see `BearerAuth`). The token is minted by
-    `POST /api/admin/login` and otherwise behaves like any other session token —
-    there is no separate admin refresh flow.
+    Every route below except `POST /api/admin/login` and
+    `POST /api/admin/refresh` requires a **Bearer access token** whose claims
+    carry `kind: admin` (see `BearerAuth`). Login returns an access token that
+    expires in 15 minutes and a refresh token that expires in 30 days. Exchange
+    the refresh token at `/api/admin/refresh` for a new token pair. Refresh
+    tokens are stateless, so each issued refresh token remains valid until it
+    expires.
 
     An `X-API-Key` header is also accepted by the gateway's authentication layer,
     but an API key always resolves to `kind: user`, never `kind: admin`. Every
@@ -85,7 +88,7 @@ security:
   - BearerAuth: []
 tags:
   - name: Auth
-    description: Admin credential login.
+    description: Admin credential login and token refresh.
   - name: Users
     description: Consumer account administration.
   - name: KYC
@@ -121,10 +124,13 @@ paths:
       operationId: HandleAdminLogin
       summary: Admin credential login
       description: |
-        Public (no credentials). Exchanges an admin's email/password for a
-        session JWT whose claims carry `kind: admin`. There is no separate
-        admin registration route — admin accounts are provisioned by another
-        admin via `POST /api/admin/admins`.
+        Public (no credentials). Exchanges an admin's email/password for an
+        access and refresh token pair. The access token is a JWT with claims
+        `kind: admin` and expires after 15 minutes. The refresh token expires
+        after 30 days and is exchanged at `POST /api/admin/refresh`.
+        The `token` response property is a backwards-compatible alias of
+        `access_token`. Admin accounts are provisioned by another admin via
+        `POST /api/admin/admins`.
       security: []
       requestBody:
         required: true
@@ -141,13 +147,51 @@ paths:
           description: Login succeeded.
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  token: { type: string, description: Bearer JWT for subsequent admin calls. }
+              schema: { $ref: "#/components/schemas/AdminTokenPair" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+        "503":
+          description: Admin authentication is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/admin/refresh:
+    post:
+      tags: [Auth]
+      operationId: HandleAdminRefresh
+      summary: Refresh admin tokens
+      description: |
+        Public (no access token required). Exchanges a valid admin refresh
+        token for a new access and refresh token pair. The access token expires
+        after 15 minutes and the refresh token after 30 days. Refresh tokens are
+        stateless; previously issued refresh tokens remain valid until expiry.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string, description: Refresh token returned by admin login or refresh. }
+      responses:
+        "200":
+          description: Token refresh succeeded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminTokenPair" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503":
+          description: Admin token issuance is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "500": { $ref: "#/components/responses/ServerError" }
 
   # ---------------------------------------------------------------- Users
@@ -655,6 +699,31 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/roles/{roleId}/permissions:
+    get:
+      tags: [Admins & Roles]
+      operationId: HandleListRolePermissions
+      summary: Read a role's current permission assignments
+      description: Requires `admin.roles.manage`. Returns an empty permissions array when the role exists but has no assignments.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current permissions assigned to the role.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Permission" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
     post:
       tags: [Admins & Roles]
       operationId: HandleAssignPermission
@@ -3063,7 +3132,8 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        Session JWT with `kind: admin`, from `POST /api/admin/login`. An
+        Access JWT with `kind: admin`, from `POST /api/admin/login` or
+        `POST /api/admin/refresh`. An
         `X-API-Key` on any route in this spec always resolves to `kind: user`
         and is therefore rejected with 403 — admin access is JWT-only.
 
@@ -3176,6 +3246,17 @@ components:
       properties:
         error: { type: string }
         reason: { type: string, description: "Structured conflict/validation reason, when applicable." }
+
+    AdminTokenPair:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in, refresh_expires_in]
+      properties:
+        token: { type: string, description: Backwards-compatible alias of access_token. }
+        access_token: { type: string, description: Bearer JWT for admin API calls; expires after 15 minutes. }
+        refresh_token: { type: string, description: Refresh JWT; expires after 30 days. }
+        token_type: { type: string, enum: [Bearer] }
+        expires_in: { type: integer, format: int64, example: 900, description: Access-token lifetime in seconds. }
+        refresh_expires_in: { type: integer, format: int64, example: 2592000, description: Refresh-token lifetime in seconds. }
 
     # ---- Users / KYC
     User:

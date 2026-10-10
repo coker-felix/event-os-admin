@@ -1,11 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { loginAdmin } from '../services/admin-auth'
+import {
+  ADMIN_SESSION_CHANGE_EVENT,
+  ADMIN_SESSION_KEY,
+  clearAdminSession,
+  loginAdmin,
+  readStoredAdminSession,
+  storeAdminSession,
+  type AuthSession,
+} from '../services/admin-auth'
 
-const AUTH_SESSION_KEY = 'event-os-admin-session'
-
-export interface AuthSession {
-  token: string
-}
+export type { AuthSession } from '../services/admin-auth'
 
 interface AuthContextValue {
   session: AuthSession | null
@@ -15,30 +19,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-function parseSession(value: string | null): AuthSession | null {
-  if (!value) return null
-
-  try {
-    const session: unknown = JSON.parse(value)
-    if (
-      typeof session === 'object' && session !== null &&
-      'token' in session && typeof session.token === 'string' && session.token.length > 0
-    ) {
-      return session as AuthSession
-    }
-  } catch {
-    // An invalid stored session is treated as signed out.
-  }
-
-  return null
-}
-
 export function getStoredAuthSession(): AuthSession | null {
-  if (typeof window === 'undefined') return null
-
-  const session = parseSession(window.sessionStorage.getItem(AUTH_SESSION_KEY))
-  if (!session) window.sessionStorage.removeItem(AUTH_SESSION_KEY)
-  return session
+  return readStoredAdminSession()
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -46,20 +28,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const syncSession = (event: StorageEvent) => {
-      if (event.key === AUTH_SESSION_KEY) setSession(parseSession(event.newValue))
+      if (event.key === ADMIN_SESSION_KEY) setSession(readStoredAdminSession())
     }
+    const syncCurrentSession = () => setSession(readStoredAdminSession())
     window.addEventListener('storage', syncSession)
-    return () => window.removeEventListener('storage', syncSession)
+    window.addEventListener(ADMIN_SESSION_CHANGE_EVENT, syncCurrentSession)
+    return () => {
+      window.removeEventListener('storage', syncSession)
+      window.removeEventListener(ADMIN_SESSION_CHANGE_EVENT, syncCurrentSession)
+    }
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
     const nextSession = await loginAdmin({ email, password })
-    window.sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(nextSession))
+    storeAdminSession(nextSession)
     setSession(nextSession)
   }, [])
 
   const signOut = useCallback(() => {
-    window.sessionStorage.removeItem(AUTH_SESSION_KEY)
+    clearAdminSession()
     setSession(null)
   }, [])
 
