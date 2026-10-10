@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { createAdminConsumer, getAdminConsumer, listAdminConsumers, setAdminConsumerStatus, type AdminConsumer } from '@/services/admin-users'
 
 const usersQueryKey = ['qk-admin-consumers'] as const
@@ -53,7 +54,7 @@ function ConsumerDetails({ userId, onClose }: { userId: string | null; onClose: 
   </Dialog>
 }
 
-function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (id: string) => void }) {
+function CreateUserSheet({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (id: string) => void }) {
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
@@ -75,19 +76,19 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
     },
   })
 
-  return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
-      <DialogHeader><DialogTitle>Add consumer account</DialogTitle><DialogDescription>Create a consumer profile. Email, phone, and password are optional.</DialogDescription></DialogHeader>
-      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}>
+  return <Sheet open={open} onOpenChange={onOpenChange}>
+    <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetHeader><SheetTitle>Add consumer account</SheetTitle><SheetDescription>Create a consumer profile. Email, phone, and password are optional.</SheetDescription></SheetHeader>
+      <form id="create-consumer-form" className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}>
         <label className="block space-y-1.5 text-sm font-medium">Full name<Input autoComplete="name" required value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Email <span className="font-normal text-ink-muted">(optional)</span><Input autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Phone <span className="font-normal text-ink-muted">(optional)</span><Input autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Password <span className="font-normal text-ink-muted">(optional)</span><Input autoComplete="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         {mutation.isError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{mutation.error.message}</p>}
-        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={mutation.isPending || !name.trim()}>{mutation.isPending ? 'Creating…' : 'Create account'}</Button></DialogFooter>
       </form>
-    </DialogContent>
-  </Dialog>
+      <SheetFooter className="border-t border-line"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" form="create-consumer-form" disabled={mutation.isPending || !name.trim()}>{mutation.isPending ? 'Creating…' : 'Create account'}</Button></SheetFooter>
+    </SheetContent>
+  </Sheet>
 }
 
 export function AccountsUsersPage() {
@@ -148,7 +149,7 @@ export function AccountsUsersPage() {
         <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredUsers.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} label="consumer accounts" />
       </CardContent>
     </Card>
-    <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={(id) => setDetailsUserId(id)} />
+    <CreateUserSheet open={createOpen} onOpenChange={setCreateOpen} onCreated={(id) => setDetailsUserId(id)} />
     <ConsumerDetails userId={detailsUserId} onClose={() => setDetailsUserId(null)} />
   </section>
 }

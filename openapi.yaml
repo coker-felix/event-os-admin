@@ -91,6 +91,8 @@ tags:
     description: Admin credential login and token refresh.
   - name: Users
     description: Consumer account administration.
+  - name: Events
+    description: Cross-organization event lifecycle, ticket-type, and order administration.
   - name: KYC
     description: KYC/KYB case review for organizations, vendors, and venues.
   - name: Platform Config
@@ -249,6 +251,38 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations:
+    get:
+      tags: [Organizations]
+      operationId: HandleAdminListOrganizations
+      summary: List organizations
+      description: Requires `admin.users.read`. Returns all organizations, newest first.
+      responses:
+        "200":
+          description: Organizations.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organizations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        type: { type: string, enum: [organizer, vendor, venue] }
+                        ownerId: { type: string }
+                        email: { type: string }
+                        phone: { type: string }
+                        address: { type: string }
+                        status: { type: string }
+                        kycStatus: { type: string }
+                        createdAt: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/users/{id}:
     get:
@@ -1151,6 +1185,236 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/events:
+    get:
+      tags: [Events]
+      operationId: HandleAdminListEvents
+      summary: List events across organizations
+      description: Requires `admin.events.read`. Results are ordered by start time and event ID.
+      parameters:
+        - { name: orgId, in: query, schema: { type: string }, description: Optional organization filter. }
+        - { name: status, in: query, schema: { type: string, enum: [draft, published, cancelled, completed] } }
+      responses:
+        "200":
+          description: Matching events.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events: { type: array, items: { $ref: "#/components/schemas/AdminEvent" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{orgId}/events:
+    post:
+      tags: [Events]
+      operationId: HandleAdminCreateEvent
+      summary: Create an event for an organization
+      description: Requires `admin.events.manage`. The event remains owned by the path organization.
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, startsAt, endsAt]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                venueId: { type: string }
+                startsAt: { type: integer, format: int64 }
+                endsAt: { type: integer, format: int64 }
+                categoryId: { type: integer, format: int32 }
+                attendanceType: { type: string }
+                countryCode: { type: string }
+                subdivisionCode: { type: string }
+                timezone: { type: string }
+                customSlug: { type: string }
+                tags: { type: array, items: { type: string } }
+      responses:
+        "201":
+          description: Event created as a draft.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminEvent" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/events/{eventId}:
+    get:
+      tags: [Events]
+      operationId: HandleAdminGetEvent
+      summary: Get event details and ticket types
+      description: Requires `admin.events.read`.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Event details, including its ticket types.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event: { $ref: "#/components/schemas/AdminEvent" }
+                  ticketTypes: { type: array, items: { $ref: "#/components/schemas/AdminTicketType" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    patch:
+      tags: [Events]
+      operationId: HandleAdminUpdateEvent
+      summary: Edit an event
+      description: Requires `admin.events.manage`; event validation and published schedule restrictions still apply.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: Same fields as organization event edits. }
+      responses:
+        "200":
+          description: Updated event.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminEvent" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/events/{eventId}/publish:
+    post:
+      tags: [Events]
+      operationId: HandleAdminPublishEvent
+      summary: Publish an event
+      description: Requires `admin.events.manage`; organization activation, KYC, and ticket readiness gates remain enforced.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Published event.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminEvent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/events/{eventId}/ticket-types:
+    get:
+      tags: [Events]
+      operationId: HandleAdminListTicketTypes
+      summary: List event ticket types
+      description: Requires `admin.events.read`.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Ticket types for the event.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticketTypes: { type: array, items: { $ref: "#/components/schemas/AdminTicketType" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    post:
+      tags: [Events]
+      operationId: HandleAdminCreateTicketType
+      summary: Add an event ticket type
+      description: Requires `admin.events.manage`.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: Same fields as organization ticket-type creation. }
+      responses:
+        "201":
+          description: Ticket type created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminTicketType" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/events/{eventId}/ticket-types/{ticketTypeId}:
+    patch:
+      tags: [Events]
+      operationId: HandleAdminUpdateTicketType
+      summary: Edit a ticket type
+      description: Requires `admin.events.manage`.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+        - { name: ticketTypeId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: Same fields as organization ticket-type edits. }
+      responses:
+        "200":
+          description: Updated ticket type.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminTicketType" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    delete:
+      tags: [Events]
+      operationId: HandleAdminDeleteTicketType
+      summary: Delete an unsold ticket type
+      description: Requires `admin.events.manage`.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+        - { name: ticketTypeId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Ticket type deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/events/{eventId}/orders:
+    get:
+      tags: [Events]
+      operationId: HandleAdminListEventOrders
+      summary: List orders for an event
+      description: Requires `admin.events.read`. Results are newest first and paginated.
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: Paginated orders and total count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders: { type: array, items: { $ref: "#/components/schemas/AdminOrder" } }
+                  total: { type: integer, format: int32 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/event-categories:
     get:
@@ -3241,6 +3505,54 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    AdminEvent:
+      type: object
+      properties:
+        id: { type: string }
+        orgId: { type: string }
+        title: { type: string }
+        description: { type: string }
+        venueId: { type: string }
+        startsAt: { type: integer, format: int64, description: Unix seconds. }
+        endsAt: { type: integer, format: int64, description: Unix seconds. }
+        currency: { type: string }
+        status: { type: string, enum: [draft, published, cancelled, completed] }
+        visibility: { type: string, enum: [public, private] }
+        categoryId: { type: integer, format: int32 }
+        attendanceType: { type: string }
+        countryCode: { type: string }
+        subdivisionCode: { type: string }
+        timezone: { type: string }
+        customSlug: { type: string }
+        tags: { type: array, items: { type: string } }
+        createdAt: { type: integer, format: int64, description: Unix seconds. }
+        updatedAt: { type: integer, format: int64, description: Unix seconds. }
+    AdminTicketType:
+      type: object
+      properties:
+        id: { type: string }
+        eventId: { type: string }
+        name: { type: string }
+        priceMinor: { type: integer, format: int64 }
+        total: { type: integer, format: int64 }
+        sold: { type: integer, format: int64 }
+        status: { type: string }
+        saleStartAt: { type: integer, format: int64, description: Unix seconds. }
+        saleEndAt: { type: integer, format: int64, description: Unix seconds. }
+    AdminOrder:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        eventId: { type: string }
+        orgId: { type: string }
+        status: { type: string }
+        total: { type: integer, format: int64 }
+        currency: { type: string }
+        contactPhone: { type: string }
+        contactEmail: { type: string }
+        createdAt: { type: integer, format: int64, description: Unix seconds. }
+        lines: { type: array, items: { type: object } }
     Error:
       type: object
       properties:

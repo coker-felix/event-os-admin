@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { changeRolePermission, createPermission, createRole, listPermissions, listRolePermissions, listRoles, type AdminPermission, type AdminRole } from '@/services/admin-rbac'
 
 const roleKeys = {
@@ -29,7 +30,7 @@ function CreateCatalogDialog({ kind, open, onOpenChange }: { kind: 'role' | 'per
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
   const mutation = useMutation({
-    mutationFn: (input: { name: string; scope: string; description: string }) => kind === 'role'
+    mutationFn: (input: { name: string; scope: string; description?: string }) => kind === 'role'
       ? createRole(session!.token, input)
       : createPermission(session!.token, input),
     onSuccess: async () => {
@@ -43,23 +44,24 @@ function CreateCatalogDialog({ kind, open, onOpenChange }: { kind: 'role' | 'per
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
+    const description = String(data.get('description') ?? '').trim()
     mutation.mutate({
       name: String(data.get('name') ?? '').trim(),
       scope: String(data.get('scope') ?? ''),
-      description: String(data.get('description') ?? '').trim(),
+      ...(description ? { description } : {}),
     })
   }
 
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent>
-    <DialogHeader><DialogTitle>Create {kind}</DialogTitle><DialogDescription>{kind === 'role' ? 'Add a named role within one access scope.' : 'Add a permission that can be granted to a role in the same scope.'}</DialogDescription></DialogHeader>
-    <form id={`create-${kind}-form`} className="space-y-4" onSubmit={submit}>
+  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+    <SheetHeader><SheetTitle>Create {kind}</SheetTitle><SheetDescription>{kind === 'role' ? 'Add a named role within one access scope.' : 'Add a permission that can be granted to a role in the same scope.'}</SheetDescription></SheetHeader>
+    <form id={`create-${kind}-form`} className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={submit}>
       <label className="block space-y-1.5 text-sm font-medium">Name<Input name="name" placeholder={kind === 'role' ? 'event_reviewer' : 'platform.events.read'} required maxLength={120} /></label>
       <label className="block space-y-1.5 text-sm font-medium">Scope<select name="scope" required defaultValue="platform" className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand">{scopes.map((scope) => <option key={scope} value={scope}>{scope}</option>)}</select></label>
       <label className="block space-y-1.5 text-sm font-medium">Description <span className="font-normal text-ink-muted">(optional)</span><textarea name="description" rows={3} maxLength={500} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30" /></label>
       {error && <FormError message={error} />}
     </form>
-    <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" form={`create-${kind}-form`} disabled={mutation.isPending}>{mutation.isPending ? 'Creating…' : `Create ${kind}`}</Button></DialogFooter>
-  </DialogContent></Dialog>
+    <SheetFooter className="border-t border-line"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" form={`create-${kind}-form`} disabled={mutation.isPending}>{mutation.isPending ? 'Creating…' : `Create ${kind}`}</Button></SheetFooter>
+  </SheetContent></Sheet>
 }
 
 function RolePermissionsDialog({ role, open, onOpenChange, permissions, permissionsLoading, permissionsError }: { role: AdminRole | null; open: boolean; onOpenChange: (open: boolean) => void; permissions: AdminPermission[]; permissionsLoading: boolean; permissionsError: string }) {

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   assignAdminRole, createAdmin, deleteAdmin, listAdminRoles, listAdmins, listRoles,
   removeAdminRole, setAdminStatus, type AdminRole, type AdminUser,
@@ -171,16 +172,16 @@ export function StaffAdminsPage() {
       </CardContent>
     </Card>
 
-    <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent>
-      <DialogHeader><DialogTitle>Add an admin</DialogTitle><DialogDescription>Create a staff login. You can assign platform roles after creating the account.</DialogDescription></DialogHeader>
-      <form id="create-admin-form" className="space-y-4" onSubmit={submitCreate}>
+    <Sheet open={createOpen} onOpenChange={setCreateOpen}><SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetHeader><SheetTitle>Add an admin</SheetTitle><SheetDescription>Create a staff login. You can assign platform roles after creating the account.</SheetDescription></SheetHeader>
+      <form id="create-admin-form" className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={submitCreate}>
         <label className="block space-y-1.5 text-sm font-medium">Full name<Input name="name" autoComplete="name" required maxLength={120} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Email address<Input name="email" type="email" autoComplete="email" required maxLength={254} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Temporary password<Input name="password" type="password" autoComplete="new-password" required minLength={8} /><span className="block text-xs font-normal text-ink-muted">At least 8 characters. Share it securely and ask the admin to change it.</span></label>
         {formError && <ErrorMessage message={formError} />}
       </form>
-      <DialogFooter><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button type="submit" form="create-admin-form" disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating…' : 'Create admin'}</Button></DialogFooter>
-    </DialogContent></Dialog>
+      <SheetFooter className="border-t border-line"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button type="submit" form="create-admin-form" disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating…' : 'Create admin'}</Button></SheetFooter>
+    </SheetContent></Sheet>
 
     <RoleAssignmentDialog admin={rolesAdmin} open={Boolean(rolesAdmin)} onOpenChange={(open) => { if (!open) setRolesAdmin(null) }} />
     <Dialog open={Boolean(pendingDelete)} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}><DialogContent>

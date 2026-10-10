@@ -79,7 +79,7 @@ export async function listRolePermissions(token: string, roleId: string) {
   return request<{ permissions: AdminPermission[] }>(token, `/api/admin/roles/${encodeURIComponent(roleId)}/permissions`)
 }
 
-export async function createRole(token: string, input: { name: string; scope: string; description: string }) {
+export async function createRole(token: string, input: { name: string; scope: string; description?: string }) {
   return request<{ id: string }>(token, '/api/admin/roles', { method: 'POST', body: JSON.stringify(input) })
 }
 
@@ -88,7 +88,7 @@ export async function listPermissions(token: string, scope?: string) {
   return request<{ permissions: AdminPermission[] }>(token, `/api/admin/permissions${query}`)
 }
 
-export async function createPermission(token: string, input: { name: string; scope: string; description: string }) {
+export async function createPermission(token: string, input: { name: string; scope: string; description?: string }) {
   return request<{ id: string }>(token, '/api/admin/permissions', { method: 'POST', body: JSON.stringify(input) })
 }
 

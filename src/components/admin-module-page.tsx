@@ -1,6 +1,7 @@
 import { useParams } from '@tanstack/react-router'
 import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage } from '@/components/accounts-directory-pages'
-import { EventsDirectoryPage, TicketVerificationPage } from '@/components/events-ticketing-pages'
+import { AdminEventsPage } from '@/components/admin-events-page'
+import { TicketVerificationPage } from '@/components/events-ticketing-pages'
 
 const moduleLabels: Record<string, string> = {
   accounts: 'Accounts',
@@ -17,7 +18,7 @@ const resourceLabels: Record<string, string> = {
   users: 'Users',
   organizations: 'Organizations',
   'org-users': 'Organization users',
-  directory: 'Published events',
+  directory: 'Event management',
   verify: 'Verify ticket',
   kyc: 'KYC review',
   admins: 'Admin users',
@@ -59,7 +60,7 @@ export function AdminModulePage() {
   if (module === 'accounts' && section === 'org-users') return <AccountsOrganizationUsersPage />
   if (module === 'accounts' && section === 'venues') return <AccountsVenuesPage />
   if (module === 'accounts' && section === 'vendors') return <AccountsVendorsPage />
-  if (module === 'events' && section === 'directory') return <EventsDirectoryPage />
+  if (module === 'events' && section === 'directory') return <AdminEventsPage />
   if (module === 'ticketing' && section === 'verify') return <TicketVerificationPage />
   const title = resourceLabels[section ?? ''] ?? section ?? 'Module overview'
 

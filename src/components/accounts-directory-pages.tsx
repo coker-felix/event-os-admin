@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   createDirectoryVenue, decideVenueClaim, getOrganizationCommerceProfile, getVenueOwnershipHistory, listAdminOrganizations, listOrganizationMembers, listPendingVenueClaims, listVenueDirectory, listVenueOrganizationReconciliation, listVendorDirectory, listVendorOrganizationReconciliation,
   resolveVenueOrganization, resolveVendorOrganization, reviewOrganizationTaxExemption, setVenueStatus, setVendorStatus, updateVendorTier, type AdminVenueClaim, type VenueDirectoryEntry, type VendorDirectoryEntry,
@@ -252,9 +253,9 @@ function VenueCreationDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       setPending(false)
     }
   }
-  return <Dialog open={open} onOpenChange={(next) => { if (!next) reset(); onOpenChange(next) }}><DialogContent className="max-h-[85vh] overflow-y-auto">
-    <DialogHeader><DialogTitle>Add directory venue</DialogTitle><DialogDescription>Create an unclaimed venue listing. Capacity is required; blank optional fields are omitted.</DialogDescription></DialogHeader>
-    <form id="create-directory-venue" className="space-y-3" onSubmit={(event: FormEvent) => { event.preventDefault(); void submit() }}>
+  return <Sheet open={open} onOpenChange={(next) => { if (!next) reset(); onOpenChange(next) }}><SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+    <SheetHeader><SheetTitle>Add directory venue</SheetTitle><SheetDescription>Create an unclaimed venue listing. Capacity is required; blank optional fields are omitted.</SheetDescription></SheetHeader>
+    <form id="create-directory-venue" className="flex-1 space-y-3 overflow-y-auto px-6 pb-6" onSubmit={(event: FormEvent) => { event.preventDefault(); void submit() }}>
       <label className="block space-y-1.5 text-sm font-medium">Venue name<Input required value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="block space-y-1.5 text-sm font-medium">Capacity<Input required type="number" min="1" step="1" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label>
       <label className="block space-y-1.5 text-sm font-medium">Address <span className="font-normal text-ink-muted">(optional)</span><Input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
@@ -263,10 +264,10 @@ function VenueCreationDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       <label className="block space-y-1.5 text-sm font-medium">Category <span className="font-normal text-ink-muted">(optional)</span><Input value={category} onChange={(event) => setCategory(event.target.value)} /></label>
       <label className="block space-y-1.5 text-sm font-medium">Description <span className="font-normal text-ink-muted">(optional)</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label>
     </form>
-    {error && <ErrorMessage>{error}</ErrorMessage>}
-    {duplicateCandidates.length > 0 && <div className="space-y-2 rounded-lg border border-warning/30 bg-warning-soft p-3"><p className="text-sm font-medium">Possible duplicate venues</p><ul className="list-disc space-y-1 pl-5 text-sm">{duplicateCandidates.map((candidate) => <li key={candidate.id}>{candidate.name || 'Unnamed venue'}{candidate.city ? ` · ${candidate.city}` : ''}{candidate.country ? `, ${candidate.country}` : ''}</li>)}</ul><p className="text-xs text-ink-muted">Confirm only if this is a separate venue.</p></div>}
-    <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>{duplicateCandidates.length ? <Button disabled={pending} onClick={() => void submit(true)}>{pending ? 'Creating…' : 'Create anyway'}</Button> : <Button type="submit" form="create-directory-venue" disabled={pending || !name.trim() || !capacity || Number(capacity) < 1}>{pending ? 'Checking…' : 'Check and create'}</Button>}</DialogFooter>
-  </DialogContent></Dialog>
+    {error && <div className="px-6"><ErrorMessage>{error}</ErrorMessage></div>}
+    {duplicateCandidates.length > 0 && <div className="mx-6 space-y-2 rounded-lg border border-warning/30 bg-warning-soft p-3"><p className="text-sm font-medium">Possible duplicate venues</p><ul className="list-disc space-y-1 pl-5 text-sm">{duplicateCandidates.map((candidate) => <li key={candidate.id}>{candidate.name || 'Unnamed venue'}{candidate.city ? ` · ${candidate.city}` : ''}{candidate.country ? `, ${candidate.country}` : ''}</li>)}</ul><p className="text-xs text-ink-muted">Confirm only if this is a separate venue.</p></div>}
+    <SheetFooter className="border-t border-line"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>{duplicateCandidates.length ? <Button disabled={pending} onClick={() => void submit(true)}>{pending ? 'Creating…' : 'Create anyway'}</Button> : <Button type="submit" form="create-directory-venue" disabled={pending || !name.trim() || !capacity || Number(capacity) < 1}>{pending ? 'Checking…' : 'Check and create'}</Button>}</SheetFooter>
+  </SheetContent></Sheet>
 }
 
 function VenueOwnershipDialog({ venue, onClose }: { venue: VenueDirectoryEntry | null; onClose: () => void }) {

@@ -48,7 +48,7 @@ const navigation: readonly AdminNavigationModule[] = [
     ],
   },
   { id: 'events', label: 'Events', icon: '◷', items: [
-    { label: 'Published events', to: '/app/events/directory' },
+    { label: 'Manage events', to: '/app/events/directory' },
   ] },
   { id: 'ticketing', label: 'Ticketing', icon: '▣', items: [
     { label: 'Verify ticket', to: '/app/ticketing/verify' },
