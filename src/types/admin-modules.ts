@@ -1,5 +1,7 @@
 export type AdminModuleId =
   | 'accounts'
+  | 'events'
+  | 'ticketing'
   | 'staff'
   | 'platform'
   | 'commerce'
