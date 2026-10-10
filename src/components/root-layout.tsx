@@ -1,6 +1,7 @@
-import { Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useSidebarStore } from '../stores/sidebar-store'
+import { useAuth } from '../contexts/auth'
 import type { AdminNavigationModule } from '@/types/admin-modules'
 
 const navigation: readonly AdminNavigationModule[] = [
@@ -64,6 +65,8 @@ const navigation: readonly AdminNavigationModule[] = [
 ]
 
 export function RootLayout() {
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
   const collapsed = useSidebarStore((state) => state.collapsed)
   const toggle = useSidebarStore((state) => state.toggle)
   const pathname = useRouterState({ select: (state) => state.location.pathname })
@@ -106,13 +109,13 @@ export function RootLayout() {
           <button onClick={toggle} className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-ink-muted hover:bg-surface-muted" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
             <span aria-hidden="true" className="grid size-5 place-items-center">⇤</span>{!collapsed && 'Collapse sidebar'}
           </button>
-          {!collapsed && <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface-muted p-3"><span className="grid size-8 place-items-center rounded-full bg-[#d9d5ff] text-xs font-semibold text-brand">AD</span><div className="min-w-0"><p className="truncate text-xs font-semibold">Admin user</p><p className="truncate text-[11px] text-ink-muted">admin@eventos.io</p></div></div>}
+          {!collapsed && <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface-muted p-3"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-semibold text-brand">AD</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">Administrator</p><p className="truncate text-[11px] text-ink-muted">Admin access</p></div></div>}
         </div>
       </aside>
       <div className={`min-h-screen transition-[margin] ${collapsed ? 'ml-[76px]' : 'ml-[248px]'}`}>
         <header className="sticky top-0 z-[5] flex h-[76px] items-center justify-between border-b border-line bg-surface/90 px-8 font-sans text-sm backdrop-blur">
           <div className="text-ink-muted">Workspace <span className="mx-2 text-line">/</span> <span className="font-medium text-ink">Admin</span></div>
-          <div className="flex items-center gap-4"><button aria-label="Notifications" className="relative grid size-9 place-items-center rounded-lg text-ink-muted hover:bg-surface-muted">♧<span className="absolute right-2 top-2 size-1.5 rounded-full bg-danger" /></button><span className="grid size-9 place-items-center rounded-full bg-[#d9d5ff] text-xs font-semibold text-brand">AD</span></div>
+          <div className="flex items-center gap-3"><button aria-label="Notifications" className="relative grid size-9 place-items-center rounded-lg text-ink-muted hover:bg-surface-muted">♧<span className="absolute right-2 top-2 size-1.5 rounded-full bg-danger" /></button><span className="hidden text-right sm:block"><span className="block text-xs font-semibold">Administrator</span><span className="block text-[11px] text-ink-muted">Admin access</span></span><span className="grid size-9 place-items-center rounded-full bg-brand-soft text-xs font-semibold text-brand">AD</span><button type="button" onClick={() => { signOut(); void navigate({ to: '/signin' }) }} className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-muted hover:bg-surface-muted hover:text-ink">Sign out</button></div>
         </header>
         <main className="mx-auto max-w-[1440px] px-8 py-8"><Outlet /></main>
       </div>
