@@ -207,7 +207,7 @@ export function RootLayout() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen  bg-[#edf1f5]">
       <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-line bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
         <div className="flex h-14 items-center gap-3 border-b border-line px-5">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-sm font-bold text-white shadow-card">E</span>

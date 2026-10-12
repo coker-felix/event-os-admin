@@ -1,10 +1,10 @@
 import { Link, useLocation, useParams } from '@tanstack/react-router'
-import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, OrganizationDetailsPage } from '@/components/accounts-directory-pages'
-import { AdminEventsPage } from '@/components/admin-events-page'
-import { ContractsPage } from '@/components/contracts-page'
-import { InvoicesPage } from '@/components/invoices-page'
-import { TicketVerificationPage } from '@/components/events-ticketing-pages'
-import { PlatformCountriesPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform-admin-pages'
+import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, MarketplaceReconciliationPage, OrganizationDetailsPage } from '@/components/accounts/accounts-directory-pages'
+import { AdminEventsPage } from '@/components/events/admin-events-page'
+import { ContractsPage } from '@/components/contracts/contracts-page'
+import { InvoicesPage } from '@/components/invoices/invoices-page'
+import { TicketVerificationPage } from '@/components/events/events-ticketing-pages'
+import { PlatformCountriesPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform/platform-admin-pages'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const moduleLabels: Record<string, string> = {
@@ -119,6 +119,10 @@ export function AdminModulePage() {
   if (module === 'accounts' && section === 'org-users') return <AccountsOrganizationUsersPage />
   if (module === 'accounts' && section === 'venues') return <AccountsVenuesPage />
   if (module === 'accounts' && section === 'vendors') return <AccountsVendorsPage />
+  if (module === 'marketplace' && section === 'vendors') return <AccountsVendorsPage />
+  if (module === 'marketplace' && section === 'venues') return <AccountsVenuesPage />
+  if (module === 'marketplace' && section === 'claims') return <AccountsVenuesPage initialTab="claims" />
+  if (module === 'marketplace' && section === 'reconciliation') return <MarketplaceReconciliationPage />
   if (module === 'events' && section === 'directory') return <AdminEventsPage />
   if (module === 'ticketing' && section === 'verify') return <TicketVerificationPage />
   if ((module === 'documents' || module === 'contracts') && section === 'contracts') return <ContractsPage />
@@ -129,7 +133,7 @@ export function AdminModulePage() {
   if (module === 'platform' && section === 'distribution-channels') return <PlatformDistributionChannelsPage />
   if (module === 'platform' && section === 'event-categories') return <PlatformEventCategoriesPage />
   if (module === 'platform' && section === 'sponsors') return <PlatformSponsorsPage />
-  if (section === 'overview') {
+  if (section === 'overview' || (module === 'marketplace' && !section)) {
     const links = overviewResources[module ?? ''] ?? []
     return <section className="space-y-6">
       <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">{moduleLabels[module ?? ''] ?? module}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1><p className="mt-2 max-w-2xl text-sm text-ink-muted">Choose an area to manage in {moduleLabels[module ?? '']?.toLowerCase() ?? 'this module'}.</p></div>

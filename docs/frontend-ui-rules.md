@@ -57,10 +57,17 @@ Each rule below was decided once and is cheap to violate by accident. Follow the
 ## Cards and output surfaces
 
 - Put tables, calculator results, balances, and panels of computed figures on a card or table card, never directly on the page.
-- Give each card a header and padded body. Use the shared `CardHeader` and `CardContent` components. A card without those content wrappers does not provide horizontal content padding, so direct text can touch the border.
+- Give content cards a header and padded body. Use the shared `CardHeader` and `CardContent` components. Result cards on index/list pages are the exception: they contain only a table and its pagination. A card without `CardContent` does not provide horizontal content padding, so direct text can touch the border.
 - A table card contains its `AppPagination` as part of the same card.
-- Prefer a card header followed by a flush table. Avoid nesting a card inside another card; a nested table keeps its border and loses its shadow automatically.
+- Keep a list table flush inside its card. Avoid nesting a card inside another card; a nested table keeps its border and loses its shadow automatically.
 - Keep the grey page background and card shadow. They were chosen on 2026-09-16 because white on near-white surfaces was hard to read; restoring a flatter white-on-white look is not a correction.
+
+## Index and list pages
+
+- Use one page title and one supporting sentence. Do not repeat the menu name as an eyebrow above the title.
+- Put search and filter controls immediately before the results card, outside the card.
+- The results card contains only the table and its pagination. Do not add a card header, title, search field, filter, or action toolbar to a table card.
+- For filters with fewer than five choices, use the shared `FilterTabs`; include **All** as the default when an unfiltered view is valid. The selected option uses primary text on a white surface.
 
 ## Table details
 
