@@ -1,18 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import {
-  flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  useReactTable,
-  type ColumnDef,
-} from '@tanstack/react-table'
+import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, CalendarCheck, ChartLineUp, CurrencyDollar, TrendUp, UsersThree, type Icon } from '@phosphor-icons/react'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
-import { AppPagination } from '@/components/ui/app-pagination'
+import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date-format'
 import { formatMoney } from '@/lib/money-format'
 
@@ -79,14 +72,6 @@ async function getOverview(): Promise<Overview> {
 
 export function DashboardPage() {
   const overview = useQuery({ queryKey: ['admin', 'overview'], queryFn: getOverview })
-  const table = useReactTable({
-    data: eventRows,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: 10, pageIndex: 0 } },
-  })
-
   return (
     <div className="space-y-8">
       <div>
@@ -116,39 +101,7 @@ export function DashboardPage() {
           </CardAction>
         </CardHeader>
         <CardContent className="p-0">
-          {eventRows.length === 0 ? (
-            <div className="px-6 py-14 text-center">
-              <p className="text-sm font-medium text-ink">No events yet</p>
-              <p className="mt-1 text-sm text-ink-muted">Events you create will show up here.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table className="min-w-[560px] text-left">
-                <TableHeader>
-                  {table.getHeaderGroups().map((group) => (
-                    <TableRow key={group.id} className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
-                      {group.headers.map((header) => <TableHead key={header.id}>{flexRender(header.column.columnDef.header, header.getContext())}</TableHead>)}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id} className="text-[13px] text-ink-muted transition-colors hover:bg-surface-muted/60">
-                      {row.getVisibleCells().map((cell) => <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          <AppPagination
-            pageIndex={table.getState().pagination.pageIndex}
-            pageSize={table.getState().pagination.pageSize}
-            totalItems={table.getPrePaginationRowModel().rows.length}
-            onPageChange={table.setPageIndex}
-            onPageSizeChange={table.setPageSize}
-            label="events"
-          />
+          <DataTable columns={columns} data={eventRows} label="Recent events" emptyMessage={<div className="px-6 py-10"><p className="text-sm font-medium text-ink">No events yet</p><p className="mt-1 text-sm text-ink-muted">Events you create will show up here.</p></div>} containerClassName="" tableClassName="min-w-[560px] text-left" headerRowClassName="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted" rowClassName="text-[13px] text-ink-muted transition-colors hover:bg-surface-muted/60" />
         </CardContent>
       </Card>
       <p className="text-center text-[11px] text-ink-muted">Overview data is sample content. Connect the admin API to load live metrics.</p>

@@ -3,13 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Key, MinusCircle, Plus, PlusCircle, ShieldCheck } from '@phosphor-icons/react'
 import { useAuth } from '@/contexts/auth'
 import { AppIconAction } from '@/components/ui/app-icon-action'
-import { AppPagination } from '@/components/ui/app-pagination'
+import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { TableCell, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { changeRolePermission, createPermission, createRole, listPermissions, listRolePermissions, listRoles, type AdminPermission, type AdminRole } from '@/services/admin-rbac'
 
@@ -146,18 +146,12 @@ export function StaffRolesPage() {
       <Card>
       <CardHeader className="border-b border-line"><CardTitle>{tab === 'roles' ? 'Role catalog' : 'Permission catalog'}</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">{filtered.length} {tab} · scopes keep organization and platform access separate</p></CardHeader>
       <CardContent className="p-0">
-        {query.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading {tab}…</p>
-          : query.isError ? <div className="p-5"><FormError message={query.error.message} /></div>
-            : <Table aria-label={tab === 'roles' ? 'Role catalog' : 'Permission catalog'}>
-              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Scope</TableHead><TableHead>Description</TableHead>{tab === 'roles' && <TableHead className="text-right">Access</TableHead>}</TableRow></TableHeader>
-              <TableBody>{visible.length ? visible.map((item) => <TableRow key={item.id}>
+        <DataTable data={visible} headers={['Name', 'Scope', 'Description', ...(tab === 'roles' ? [{ label: 'Access', className: 'text-right' }] : [])]} label={tab === 'roles' ? 'Role catalog' : 'Permission catalog'} loading={query.isLoading} loadingMessage={`Loading ${tab}…`} error={query.isError ? query.error.message : null} emptyMessage={`No ${tab} found for this scope.`} pagination={{ pageIndex, pageSize, totalItems: filtered.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(item) => <TableRow key={item.id}>
                 <TableCell><span className="flex items-center gap-2 font-medium"><span className="grid size-8 place-items-center rounded-lg bg-brand-soft text-brand">{tab === 'roles' ? <ShieldCheck size={16} /> : <Key size={16} />}</span>{item.name}</span></TableCell>
                 <TableCell><Badge variant="outline">{item.scope}</Badge></TableCell>
                 <TableCell className="max-w-[34rem] whitespace-normal text-ink-muted">{item.description || '—'}</TableCell>
                 {tab === 'roles' && <TableCell className="text-right"><div className="flex justify-end"><AppIconAction label={`Manage permissions for ${item.name}`} icon={<ShieldCheck size={16} />} showLabel onClick={() => setPermissionsRole(item as AdminRole)} /></div></TableCell>}
-              </TableRow>) : <TableRow><TableCell colSpan={tab === 'roles' ? 4 : 3} className="h-28 text-center text-sm text-ink-muted">No {tab} found for this scope.</TableCell></TableRow>}</TableBody>
-            </Table>}
-        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filtered.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label={tab} />
+              </TableRow>} containerClassName="" />
       </CardContent>
       </Card>
     </section>

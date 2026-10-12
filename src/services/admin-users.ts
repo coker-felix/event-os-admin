@@ -13,6 +13,12 @@ export interface AdminConsumer {
   createdByOrgId?: string | null
 }
 
+export interface AdminConsumerChannel {
+  channel: string
+  firstSeenAt?: string | null
+  lastSeenAt?: string | null
+}
+
 export interface CreateAdminConsumerRequest {
   name: string
   email?: string
@@ -50,6 +56,11 @@ export function listAdminConsumers(token: string, status?: AdminConsumer['status
 
 export function getAdminConsumer(token: string, id: string) {
   return request<AdminConsumer>(token, `/api/admin/users/${encodeURIComponent(id)}`)
+}
+
+export async function listAdminConsumerChannels(token: string, id: string) {
+  const payload = await request<{ channels?: Array<AdminConsumerChannel | null> | null }>(token, `/api/admin/users/${encodeURIComponent(id)}/channels`)
+  return { channels: Array.isArray(payload?.channels) ? payload.channels.filter((channel): channel is AdminConsumerChannel => Boolean(channel && typeof channel.channel === 'string')) : [] }
 }
 
 export function createAdminConsumer(token: string, input: CreateAdminConsumerRequest) {

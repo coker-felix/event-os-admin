@@ -132,17 +132,6 @@ const navigation: readonly AdminNavigationModule[] = [
     { label: 'Verify ticket', to: '/app/ticketing/verify' },
   ] },
   {
-    id: 'platform', label: 'Platform', icon: '⚙', items: [
-      { label: 'Overview', to: '/app/platform/overview' },
-      { label: 'Platform settings', to: '/app/platform/settings' },
-      { label: 'Sponsors', to: '/app/platform/sponsors' },
-      { label: 'Countries', to: '/app/platform/countries' },
-      { label: 'Subdivisions', to: '/app/platform/subdivisions' },
-      { label: 'Distribution channels', to: '/app/platform/distribution-channels' },
-      { label: 'Event categories', to: '/app/platform/event-categories' },
-    ],
-  },
-  {
     id: 'commerce', label: 'Commerce', icon: '◇', items: [
       { label: 'Overview', to: '/app/commerce/overview' },
       { label: 'Tax rules', to: '/app/commerce/taxes' },
@@ -186,6 +175,17 @@ const navigation: readonly AdminNavigationModule[] = [
     ],
   },
   {
+    id: 'platform', label: 'Platform', icon: '⚙', items: [
+      { label: 'Overview', to: '/app/platform/overview' },
+      { label: 'Platform settings', to: '/app/platform/settings' },
+      { label: 'Sponsors', to: '/app/platform/sponsors' },
+      { label: 'Countries', to: '/app/platform/countries' },
+      { label: 'Subdivisions', to: '/app/platform/subdivisions' },
+      { label: 'Distribution channels', to: '/app/platform/distribution-channels' },
+      { label: 'Event categories', to: '/app/platform/event-categories' },
+    ],
+  },
+  {
     id: 'staff', label: 'Staff & access', icon: '♙', items: [
       { label: 'Overview', to: '/app/staff/overview' },
       { label: 'Admin users', to: '/app/staff/admins' },
@@ -209,7 +209,7 @@ export function RootLayout() {
   return (
     <div className="min-h-screen bg-canvas">
       <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-line bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
-        <div className="flex h-[76px] items-center gap-3 border-b border-line px-5">
+        <div className="flex h-14 items-center gap-3 border-b border-line px-5">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-sm font-bold text-white shadow-card">E</span>
           {!collapsed && <span className="min-w-0"><span className="block text-[15px] font-semibold tracking-tight">event<span className="text-brand">OS</span></span><span className="block text-[11px] text-ink-muted">Admin Console</span></span>}
         </div>
@@ -221,7 +221,8 @@ export function RootLayout() {
             </Link>
             {navigation.map((group) => {
               const GroupIcon = moduleIcons[group.id]
-              const groupActive = group.items.some((item) => pathname === item.to || pathname.startsWith(`${item.to}/`))
+              const organizationDetailActive = group.id === 'accounts' && pathname.startsWith('/app/organizations/')
+              const groupActive = organizationDetailActive || group.items.some((item) => pathname === item.to || pathname.startsWith(`${item.to}/`))
               const isExpanded = expanded[group.id] ?? groupActive
 
               if (!isExpanded) {
@@ -246,7 +247,7 @@ export function RootLayout() {
                 </button>
                 {!collapsed && <div className="space-y-0.5 py-1 pl-7">
                   {group.items.map((item) => {
-                    const active = pathname === item.to || pathname.startsWith(`${item.to}/`)
+                    const active = (item.to === '/app/accounts/organizations' && organizationDetailActive) || pathname === item.to || pathname.startsWith(`${item.to}/`)
                     const ItemIcon = itemIcons[item.to] ?? GroupIcon
                     return <Link key={item.to} to={item.to as never} aria-current={active ? 'page' : undefined} className={`flex min-h-8 items-center gap-2.5 rounded-lg px-2 text-xs transition-colors ${active ? 'bg-brand-soft font-medium text-brand' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
                       <ItemIcon aria-hidden="true" size={16} weight="duotone" className="shrink-0" />
@@ -269,7 +270,7 @@ export function RootLayout() {
         </div>
       </aside>
       <div className={`min-h-screen transition-[margin] ${collapsed ? 'ml-[76px]' : 'ml-[248px]'}`}>
-        <header className="sticky top-0 z-[5] flex h-[76px] items-center justify-end gap-4 border-b border-line bg-surface/90 px-8 font-sans text-sm backdrop-blur">
+        <header className="sticky top-0 z-[5] flex h-14 items-center justify-end gap-4 border-b border-line bg-surface/90 px-8 font-sans text-sm backdrop-blur">
           <label className="relative flex h-10 w-full max-w-80 items-center gap-2 rounded-full border border-line bg-surface-muted px-3.5 text-ink-muted">
             <MagnifyingGlass size={14} aria-hidden="true" />
             <span className="sr-only">Search</span>

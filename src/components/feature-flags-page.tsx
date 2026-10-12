@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/auth'
-import { AppPagination } from '@/components/ui/app-pagination'
+import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { TableCell, TableRow } from '@/components/ui/table'
 import { listFeatureFlags, setFeatureFlagDefault, type FeatureFlag } from '@/services/admin-feature-flags'
 
 const featureFlagQueryKey = ['qk-admin-feature-flags'] as const
@@ -81,16 +81,7 @@ export function FeatureFlagsPage() {
         />
       </CardHeader>
       <CardContent className="p-0">
-        {flagsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading feature flags…</p>
-          : flagsQuery.isError ? <div role="alert" className="m-5 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger">{flagsQuery.error.message}</div>
-            : <Table aria-label="Feature flag platform defaults">
-              <TableHeader><TableRow><TableHead>Feature flag</TableHead><TableHead>Default state</TableHead><TableHead className="text-right">Global default</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {visibleFlags.length ? visibleFlags.map((flag) => <FeatureFlagRow key={flag.name} flag={flag} />)
-                  : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">{search ? 'No feature flags match your search.' : 'No feature flags are registered.'}</TableCell></TableRow>}
-              </TableBody>
-            </Table>}
-        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredFlags.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label="feature flags" />
+        <DataTable data={visibleFlags} headers={['Feature flag', 'Default state', { label: 'Global default', className: 'text-right' }]} label="Feature flag platform defaults" loading={flagsQuery.isLoading} loadingMessage="Loading feature flags…" error={flagsQuery.isError ? flagsQuery.error.message : null} emptyMessage={search ? 'No feature flags match your search.' : 'No feature flags are registered.'} pagination={{ pageIndex, pageSize, totalItems: filteredFlags.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(flag) => <FeatureFlagRow key={flag.name} flag={flag} />} containerClassName="" />
       </CardContent>
     </Card>
   </section>

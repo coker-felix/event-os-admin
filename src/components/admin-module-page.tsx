@@ -1,5 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router'
-import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage } from '@/components/accounts-directory-pages'
+import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, OrganizationDetailsPage } from '@/components/accounts-directory-pages'
 import { AdminEventsPage } from '@/components/admin-events-page'
 import { TicketVerificationPage } from '@/components/events-ticketing-pages'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -107,6 +107,7 @@ const overviewResources: Record<string, Array<{ label: string; section: string }
 
 export function AdminModulePage() {
   const { module, section } = useParams({ strict: false })
+  if (module === 'organizations' && section) return <OrganizationDetailsPage organizationId={section} />
   if (module === 'accounts' && section === 'organizations') return <AccountsOrganizationsPage />
   if (module === 'accounts' && section === 'org-users') return <AccountsOrganizationUsersPage />
   if (module === 'accounts' && section === 'venues') return <AccountsVenuesPage />

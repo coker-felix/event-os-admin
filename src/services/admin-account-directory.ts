@@ -27,8 +27,32 @@ export interface AdminOrganization {
   id: string
   name?: string | null
   slug?: string | null
+  type?: 'organizer' | 'vendor' | 'venue' | null
+  ownerId?: string | null
+  email?: string | null
+  phone?: string | null
+  address?: string | null
   status?: string | null
+  kycStatus?: string | null
   createdAt?: string | number | null
+}
+
+export interface CreateAdminOrganizationInput {
+  owner_id: string
+  name: string
+  type: 'organizer' | 'vendor' | 'venue'
+}
+
+export interface CreateAdminVendorInput {
+  accountId: string
+  businessName: string
+  contactName?: string
+  email?: string
+  phone?: string
+  category?: string
+  city?: string
+  country?: string
+  description?: string
 }
 
 export interface OrganizationMember {
@@ -155,6 +179,18 @@ export async function listAdminOrganizations(token: string) {
   const response = await request<{ organizations?: Array<AdminOrganization | null> | null } | Array<AdminOrganization | null>>(token, '/api/admin/organizations')
   const rows = Array.isArray(response) ? response : response?.organizations
   return { organizations: normalizeRows(rows) }
+}
+
+export function createAdminOrganization(token: string, input: CreateAdminOrganizationInput) {
+  return request<{ organization?: AdminOrganization | null } & Partial<AdminOrganization>>(token, '/api/admin/organizations', {
+    method: 'POST', body: JSON.stringify(input),
+  })
+}
+
+export function createAdminVendor(token: string, input: CreateAdminVendorInput) {
+  return request<{ vendor?: VendorDirectoryEntry | null } & Partial<VendorDirectoryEntry>>(token, '/api/admin/vendors', {
+    method: 'POST', body: JSON.stringify(input),
+  })
 }
 
 export async function listOrganizationMembers(token: string, id: string) {

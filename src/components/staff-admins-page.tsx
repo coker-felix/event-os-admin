@@ -3,13 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldCheck, Pause, Play, Trash, UserPlus, X } from '@phosphor-icons/react'
 import { useAuth } from '@/contexts/auth'
 import { AppIconAction } from '@/components/ui/app-icon-action'
-import { AppPagination } from '@/components/ui/app-pagination'
+import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { TableCell, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   assignAdminRole, createAdmin, deleteAdmin, listAdminRoles, listAdmins, listRoles,
@@ -154,11 +154,7 @@ export function StaffAdminsPage() {
     <Card>
       <CardHeader className="border-b border-line sm:grid-cols-[1fr_auto] sm:items-center"><div><CardTitle>Staff accounts</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">{adminsQuery.data?.admins.length ?? '—'} accounts in this workspace</p></div><input aria-label="Search admin users" placeholder="Search name or email" value={search} onChange={(event) => { setSearch(event.target.value); setPageIndex(0) }} className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30 sm:w-64" /></CardHeader>
       <CardContent className="p-0">
-        {adminsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading staff accounts…</p>
-          : adminsQuery.isError ? <div className="p-5"><ErrorMessage message={adminsQuery.error.message} /></div>
-            : <Table aria-label="Staff accounts">
-              <TableHeader><TableRow><TableHead>Admin</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
-              <TableBody>{visibleAdmins.length ? visibleAdmins.map((admin) => <TableRow key={admin.id}>
+        <DataTable data={visibleAdmins} headers={['Admin', 'Status', { label: 'Actions', className: 'text-right' }]} label="Staff accounts" loading={adminsQuery.isLoading} loadingMessage="Loading staff accounts…" error={adminsQuery.isError ? adminsQuery.error.message : null} emptyMessage={filteredAdmins.length ? 'No admins on this page.' : search ? 'No admins match your search.' : 'No staff accounts yet.'} pagination={{ pageIndex, pageSize, totalItems: filteredAdmins.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(admin) => <TableRow key={admin.id}>
                 <TableCell><div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-semibold text-brand">{admin.name.trim().slice(0, 1).toUpperCase() || '?'}</span><span className="min-w-0"><span className="block truncate font-medium text-ink">{admin.name}</span><span className="block truncate text-xs text-ink-muted">{admin.email}</span></span></div></TableCell>
                 <TableCell>{admin.status === 'active' ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{admin.status || 'Unknown'}</Badge>}</TableCell>
                 <TableCell className="text-right"><div className="flex justify-end gap-1">
@@ -166,9 +162,7 @@ export function StaffAdminsPage() {
                   <AppIconAction label={admin.status === 'active' ? `Suspend ${admin.name}` : `Reactivate ${admin.name}`} icon={admin.status === 'active' ? <Pause size={16} /> : <Play size={16} />} disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ admin, status: admin.status === 'active' ? 'suspended' : 'active' })} />
                   <AppIconAction label={`Remove ${admin.name}`} icon={<Trash size={16} />} disabled={deleteMutation.isPending} onClick={() => setPendingDelete(admin)} />
                 </div></TableCell>
-              </TableRow>) : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">{filteredAdmins.length ? 'No admins on this page.' : search ? 'No admins match your search.' : 'No staff accounts yet.'}</TableCell></TableRow>}</TableBody>
-            </Table>}
-        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredAdmins.length} onPageChange={(index) => { setPageIndex(Math.min(index, pageCount - 1)) }} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label="admin users" />
+              </TableRow>} containerClassName="" />
       </CardContent>
     </Card>
 
