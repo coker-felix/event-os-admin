@@ -20,17 +20,18 @@ Each rule below was decided once and is cheap to violate by accident. Follow the
 ## Tables
 
 - Do not zebra stripe rows. Separate rows with one hairline. A row tint must communicate a specific state, such as selection or a child row.
-- Use vertical dividers through the header and every body row. Keep cell padding generous so the grid stays readable.
+- Do not use vertical dividers. Rows and headers separate with a horizontal hairline only (changed 2026-10-10; a flatter grid reads cleaner than ruled columns). Keep cell padding generous so the grid stays readable.
+- Header cells sit on a muted background with a small, uppercase, letter-spaced label. This comes from the shared `TableHeader`/`TableHead` styling; do not re-style headers per table.
 - Keep one body row height across tables, regardless of column count.
 - Identity cells use a tinted monogram with a secondary value under the primary value. Do not spend a column on an ID.
 - Badges communicate semantic status: success, warning, info, or neutral. Do not make every badge neutral.
-- Every table uses `app-pagination` and reports the visible range, such as **“Showing 1 to 10 of 47.”**
+- Every table uses `app-pagination` and reports the visible range, such as **“Showing 1 to 10 of 47.”** Pass `onPageSizeChange` so a rows-per-page control is shown; omit it only when a table's size cannot reasonably change.
 - Pagination is client side while the gateway ignores page and size. Moving it server side changes both the resource URL and the component inputs.
 
 ## Row actions
 
 - Show a row action only when it performs a real operation. If its endpoint does not exist, do not show the action.
-- Use `app-icon-action` for row actions: an icon, a tooltip, and an optional short visible label. Toolbar actions above a table retain their words.
+- Use `app-icon-action` for row actions: an icon, a tooltip, and an optional short visible label. It renders on a permanent soft-gray pill (not transparent-until-hover) so a row's actions read as a cluster. Toolbar actions above a table retain their words.
 - The action label is required, even when visually hidden. It supplies both the tooltip and the accessible name.
 - Choose icons that match the operation. Revising takes a branch icon, never a pencil: a pencil implies editing the existing record (U1).
 - Reuse the established icon vocabulary rather than inventing a second icon for the same operation.

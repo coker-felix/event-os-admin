@@ -13,7 +13,6 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { createAdminConsumer, getAdminConsumer, listAdminConsumers, setAdminConsumerStatus, type AdminConsumer } from '@/services/admin-users'
 
 const usersQueryKey = ['qk-admin-consumers'] as const
-const pageSize = 10
 
 function UserStatus({ status }: { status: AdminConsumer['status'] }) {
   if (status === 'active') return <Badge className="bg-success-soft text-success">Active</Badge>
@@ -97,6 +96,7 @@ export function AccountsUsersPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'' | 'guest' | 'active' | 'suspended'>('')
   const [pageIndex, setPageIndex] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
   const [createOpen, setCreateOpen] = useState(false)
   const [detailsUserId, setDetailsUserId] = useState<string | null>(null)
   const usersQuery = useQuery({
@@ -131,13 +131,13 @@ export function AccountsUsersPage() {
         {usersQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading consumer accounts…</p>
           : usersQuery.isError ? <div role="alert" className="m-5 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger">{usersQuery.error.message}</div>
             : <div className="overflow-x-auto"><Table aria-label="Consumer accounts">
-              <TableHeader><TableRow><TableHead className="border-r border-line">User</TableHead><TableHead className="border-r border-line">Contact</TableHead><TableHead className="border-r border-line">Status</TableHead><TableHead className="border-r border-line">Created via</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Contact</TableHead><TableHead>Status</TableHead><TableHead>Created via</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {visibleUsers.length ? visibleUsers.map((user) => <TableRow key={user.id}>
-                  <TableCell className="border-r border-line"><div className="flex items-center gap-3"><Monogram name={user.name || 'Unnamed user'} /><div className="min-w-0"><p className="truncate font-medium text-ink">{user.name || 'Unnamed user'}</p><p className="mt-0.5 truncate text-xs text-ink-muted">{user.email || user.phone || 'No contact details'}</p></div></div></TableCell>
-                  <TableCell className="border-r border-line"><span className="block">{user.email || '—'}</span><span className="mt-0.5 block text-xs text-ink-muted">{user.phone || 'No phone number'}</span></TableCell>
-                  <TableCell className="border-r border-line"><UserStatus status={user.status} /></TableCell>
-                  <TableCell className="border-r border-line">{user.createdVia || '—'}</TableCell>
+                  <TableCell><div className="flex items-center gap-3"><Monogram name={user.name || 'Unnamed user'} /><div className="min-w-0"><p className="truncate font-medium text-ink">{user.name || 'Unnamed user'}</p><p className="mt-0.5 truncate text-xs text-ink-muted">{user.email || user.phone || 'No contact details'}</p></div></div></TableCell>
+                  <TableCell><span className="block">{user.email || '—'}</span><span className="mt-0.5 block text-xs text-ink-muted">{user.phone || 'No phone number'}</span></TableCell>
+                  <TableCell><UserStatus status={user.status} /></TableCell>
+                  <TableCell>{user.createdVia || '—'}</TableCell>
                   <TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label={`View ${user.name}`} icon={<span aria-hidden="true">↗</span>} onClick={() => setDetailsUserId(user.id)} /><AppIconAction label={`${user.status === 'active' ? 'Suspend' : 'Activate'} ${user.name}`} icon={<span aria-hidden="true">{user.status === 'active' ? 'Ⅱ' : '▶'}</span>} disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ user, nextStatus: user.status === 'active' ? 'suspended' : 'active' })} /></div></TableCell>
                 </TableRow>) : <TableRow><TableCell colSpan={5} className="h-36 text-center">
                   {search ? <p className="text-sm text-ink-muted">No accounts match “{search}”. Try another search.</p>
@@ -146,7 +146,7 @@ export function AccountsUsersPage() {
                 </TableCell></TableRow>}
               </TableBody>
             </Table></div>}
-        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredUsers.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} label="consumer accounts" />
+        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredUsers.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label="consumer accounts" />
       </CardContent>
     </Card>
     <CreateUserSheet open={createOpen} onOpenChange={setCreateOpen} onCreated={(id) => setDetailsUserId(id)} />

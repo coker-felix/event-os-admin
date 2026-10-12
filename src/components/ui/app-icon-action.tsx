@@ -22,6 +22,7 @@ export function AppIconAction({ label, icon, onClick, disabled, showLabel = fals
             aria-label={label}
             disabled={disabled}
             onClick={onClick}
+            className="rounded-full bg-surface-muted text-ink-muted hover:bg-line hover:text-ink"
           />
         }
       >

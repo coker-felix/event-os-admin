@@ -1,7 +1,8 @@
-import { useParams } from '@tanstack/react-router'
+import { Link, useParams } from '@tanstack/react-router'
 import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage } from '@/components/accounts-directory-pages'
 import { AdminEventsPage } from '@/components/admin-events-page'
 import { TicketVerificationPage } from '@/components/events-ticketing-pages'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const moduleLabels: Record<string, string> = {
   accounts: 'Accounts',
@@ -12,9 +13,12 @@ const moduleLabels: Record<string, string> = {
   commerce: 'Commerce',
   marketplace: 'Marketplace',
   documents: 'Documents',
+  contracts: 'Contracts',
+  invoices: 'Invoices',
 }
 
 const resourceLabels: Record<string, string> = {
+  overview: 'Overview',
   users: 'Users',
   organizations: 'Organizations',
   'org-users': 'Organization users',
@@ -52,6 +56,53 @@ const resourceLabels: Record<string, string> = {
   'vendor-contract-backfills': 'Vendor contract backfills',
   'venue-contract-backfills': 'Venue contract backfills',
   'contract-reconciliation': 'Contract reconciliation',
+  list: 'Invoices',
+}
+
+const overviewResources: Record<string, Array<{ label: string; section: string }>> = {
+  accounts: [
+    { label: 'Users', section: 'users' }, { label: 'Organizations', section: 'organizations' },
+    { label: 'Organization users', section: 'org-users' }, { label: 'Venues', section: 'venues' },
+    { label: 'Vendors', section: 'vendors' }, { label: 'KYC review', section: 'kyc' },
+  ],
+  events: [{ label: 'Manage events', section: 'directory' }],
+  ticketing: [{ label: 'Verify ticket', section: 'verify' }],
+  staff: [{ label: 'Admin users', section: 'admins' }, { label: 'Roles & permissions', section: 'roles' }, { label: 'Feature flags', section: 'flags' }],
+  platform: [
+    { label: 'Platform settings', section: 'settings' }, { label: 'Sponsors', section: 'sponsors' },
+    { label: 'Countries', section: 'countries' }, { label: 'Subdivisions', section: 'subdivisions' },
+    { label: 'Distribution channels', section: 'distribution-channels' }, { label: 'Event categories', section: 'event-categories' },
+  ],
+  commerce: [
+    { label: 'Tax rules', section: 'taxes' }, { label: 'Fee rules', section: 'fees' },
+    { label: 'Commerce settings', section: 'commerce' }, { label: 'Tax exemptions', section: 'exemptions' },
+    { label: 'Payouts', section: 'payouts' },
+  ],
+  marketplace: [
+    { label: 'Vendors', section: 'vendors' }, { label: 'Venues', section: 'venues' },
+    { label: 'Venue claims', section: 'claims' }, { label: 'Organization reconciliation', section: 'reconciliation' },
+  ],
+  documents: [
+    { label: 'Legal identities', section: 'identities' }, { label: 'Document clauses', section: 'clauses' },
+    { label: 'Contract templates', section: 'templates' }, { label: 'Document settings', section: 'document-settings' },
+    { label: 'Artifacts', section: 'artifacts' }, { label: 'Retention policies', section: 'retention' },
+    { label: 'Catalog render jobs', section: 'render-jobs' }, { label: 'Contracts', section: 'contracts' },
+    { label: 'Lifecycle events', section: 'lifecycle' }, { label: 'Operations render jobs', section: 'operations-render-jobs' },
+    { label: 'Vendor contract backfills', section: 'vendor-contract-backfills' },
+    { label: 'Venue contract backfills', section: 'venue-contract-backfills' },
+    { label: 'Contract reconciliation', section: 'contract-reconciliation' },
+  ],
+  contracts: [
+    { label: 'Contracts', section: 'contracts' }, { label: 'Legal identities', section: 'identities' },
+    { label: 'Document clauses', section: 'clauses' }, { label: 'Contract templates', section: 'templates' },
+    { label: 'Document settings', section: 'document-settings' }, { label: 'Artifacts', section: 'artifacts' },
+    { label: 'Retention policies', section: 'retention' }, { label: 'Catalog render jobs', section: 'render-jobs' },
+    { label: 'Lifecycle events', section: 'lifecycle' }, { label: 'Operations render jobs', section: 'operations-render-jobs' },
+    { label: 'Vendor contract backfills', section: 'vendor-contract-backfills' },
+    { label: 'Venue contract backfills', section: 'venue-contract-backfills' },
+    { label: 'Contract reconciliation', section: 'contract-reconciliation' },
+  ],
+  invoices: [{ label: 'Invoices', section: 'list' }],
 }
 
 export function AdminModulePage() {
@@ -62,6 +113,16 @@ export function AdminModulePage() {
   if (module === 'accounts' && section === 'vendors') return <AccountsVendorsPage />
   if (module === 'events' && section === 'directory') return <AdminEventsPage />
   if (module === 'ticketing' && section === 'verify') return <TicketVerificationPage />
+  if (section === 'overview') {
+    const links = overviewResources[module ?? ''] ?? []
+    return <section className="space-y-6">
+      <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">{moduleLabels[module ?? ''] ?? module}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1><p className="mt-2 max-w-2xl text-sm text-ink-muted">Choose an area to manage in {moduleLabels[module ?? '']?.toLowerCase() ?? 'this module'}.</p></div>
+      <Card><CardHeader><CardTitle>{moduleLabels[module ?? ''] ?? module} pages</CardTitle></CardHeader><CardContent><ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{links.map((item) => {
+        const to = module === 'contracts' ? `/app/documents/${item.section}` : `/app/${module}/${item.section}`
+        return <li key={item.section}><Link to={to as never} className="flex min-h-16 items-center justify-between gap-3 rounded-lg border border-line px-4 py-3 text-sm font-medium text-ink transition-colors hover:bg-surface-muted"><span>{item.label}</span><span aria-hidden="true" className="text-ink-muted">↗</span></Link></li>
+      })}</ul></CardContent></Card>
+    </section>
+  }
   const title = resourceLabels[section ?? ''] ?? section ?? 'Module overview'
 
   return (

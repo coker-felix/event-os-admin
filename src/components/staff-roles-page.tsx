@@ -114,7 +114,7 @@ export function StaffRolesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [permissionsRole, setPermissionsRole] = useState<AdminRole | null>(null)
   const [pageIndex, setPageIndex] = useState(0)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(10)
   const rolesQuery = useQuery({ queryKey: roleKeys.roles, queryFn: () => listRoles(session!.token), enabled: Boolean(session?.token) })
   const permissionsQuery = useQuery({ queryKey: roleKeys.permissions, queryFn: () => listPermissions(session!.token), enabled: Boolean(session?.token) })
   const roles = rolesQuery.data?.roles ?? []
@@ -149,15 +149,15 @@ export function StaffRolesPage() {
         {query.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading {tab}…</p>
           : query.isError ? <div className="p-5"><FormError message={query.error.message} /></div>
             : <Table aria-label={tab === 'roles' ? 'Role catalog' : 'Permission catalog'}>
-              <TableHeader><TableRow><TableHead className="border-r border-line">Name</TableHead><TableHead className="border-r border-line">Scope</TableHead><TableHead className={tab === 'roles' ? 'border-r border-line' : ''}>Description</TableHead>{tab === 'roles' && <TableHead className="text-right">Access</TableHead>}</TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Scope</TableHead><TableHead>Description</TableHead>{tab === 'roles' && <TableHead className="text-right">Access</TableHead>}</TableRow></TableHeader>
               <TableBody>{visible.length ? visible.map((item) => <TableRow key={item.id}>
-                <TableCell className="border-r border-line"><span className="flex items-center gap-2 font-medium"><span className="grid size-8 place-items-center rounded-lg bg-brand-soft text-brand">{tab === 'roles' ? <ShieldCheck size={16} /> : <Key size={16} />}</span>{item.name}</span></TableCell>
-                <TableCell className="border-r border-line"><Badge variant="outline">{item.scope}</Badge></TableCell>
-                <TableCell className={`max-w-[34rem] whitespace-normal text-ink-muted ${tab === 'roles' ? 'border-r border-line' : ''}`}>{item.description || '—'}</TableCell>
+                <TableCell><span className="flex items-center gap-2 font-medium"><span className="grid size-8 place-items-center rounded-lg bg-brand-soft text-brand">{tab === 'roles' ? <ShieldCheck size={16} /> : <Key size={16} />}</span>{item.name}</span></TableCell>
+                <TableCell><Badge variant="outline">{item.scope}</Badge></TableCell>
+                <TableCell className="max-w-[34rem] whitespace-normal text-ink-muted">{item.description || '—'}</TableCell>
                 {tab === 'roles' && <TableCell className="text-right"><div className="flex justify-end"><AppIconAction label={`Manage permissions for ${item.name}`} icon={<ShieldCheck size={16} />} showLabel onClick={() => setPermissionsRole(item as AdminRole)} /></div></TableCell>}
               </TableRow>) : <TableRow><TableCell colSpan={tab === 'roles' ? 4 : 3} className="h-28 text-center text-sm text-ink-muted">No {tab} found for this scope.</TableCell></TableRow>}</TableBody>
             </Table>}
-        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filtered.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} label={tab} />
+        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filtered.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label={tab} />
       </CardContent>
       </Card>
     </section>

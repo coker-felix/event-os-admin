@@ -23,12 +23,12 @@ function FeatureFlagRow({ flag }: { flag: FeatureFlag }) {
   })
 
   return <TableRow>
-    <TableCell className="border-r border-line">
+    <TableCell>
       <span className="block font-medium text-ink">{flag.name}</span>
       <span className="mt-1 block whitespace-normal text-xs leading-5 text-ink-muted">{flag.description || 'No description provided.'}</span>
       {mutation.isError && <span role="alert" className="mt-1 block text-xs text-danger">{mutation.error.message}</span>}
     </TableCell>
-    <TableCell className="border-r border-line">{flag.defaultEnabled ? <Badge className="bg-success-soft text-success">Enabled</Badge> : <Badge variant="outline">Disabled</Badge>}</TableCell>
+    <TableCell>{flag.defaultEnabled ? <Badge className="bg-success-soft text-success">Enabled</Badge> : <Badge variant="outline">Disabled</Badge>}</TableCell>
     <TableCell className="text-right">
       <div className="flex items-center justify-end gap-3">
         <span className="text-xs text-ink-muted">{mutation.isPending ? 'Saving…' : flag.defaultEnabled ? 'On' : 'Off'}</span>
@@ -47,7 +47,7 @@ export function FeatureFlagsPage() {
   const { session } = useAuth()
   const [search, setSearch] = useState('')
   const [pageIndex, setPageIndex] = useState(0)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(10)
   const flagsQuery = useQuery({
     queryKey: featureFlagQueryKey,
     queryFn: () => listFeatureFlags(session!.token),
@@ -84,13 +84,13 @@ export function FeatureFlagsPage() {
         {flagsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading feature flags…</p>
           : flagsQuery.isError ? <div role="alert" className="m-5 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger">{flagsQuery.error.message}</div>
             : <Table aria-label="Feature flag platform defaults">
-              <TableHeader><TableRow><TableHead className="border-r border-line">Feature flag</TableHead><TableHead className="border-r border-line">Default state</TableHead><TableHead className="text-right">Global default</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Feature flag</TableHead><TableHead>Default state</TableHead><TableHead className="text-right">Global default</TableHead></TableRow></TableHeader>
               <TableBody>
                 {visibleFlags.length ? visibleFlags.map((flag) => <FeatureFlagRow key={flag.name} flag={flag} />)
                   : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">{search ? 'No feature flags match your search.' : 'No feature flags are registered.'}</TableCell></TableRow>}
               </TableBody>
             </Table>}
-        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredFlags.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} label="feature flags" />
+        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredFlags.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label="feature flags" />
       </CardContent>
     </Card>
   </section>

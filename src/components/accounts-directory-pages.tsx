@@ -15,7 +15,6 @@ import {
   resolveVenueOrganization, resolveVendorOrganization, reviewOrganizationTaxExemption, setVenueStatus, setVendorStatus, updateVendorTier, type AdminVenueClaim, type VenueDirectoryEntry, type VendorDirectoryEntry,
 } from '@/services/admin-account-directory'
 
-const pageSize = 10
 const vendorKey = ['qk-admin-vendor-directory'] as const
 const venueKey = ['qk-admin-venue-directory'] as const
 const vendorOrgQueueKey = ['qk-admin-vendor-org-reconciliation'] as const
@@ -48,6 +47,7 @@ function DirectoryTable<T extends { id: string }>({
   label: string
 }) {
   const [pageIndex, setPageIndex] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
   const filtered = useMemo(() => rows.filter((row) => JSON.stringify(row).toLowerCase().includes(search.trim().toLowerCase())), [rows, search])
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
   const visible = filtered.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
@@ -57,12 +57,12 @@ function DirectoryTable<T extends { id: string }>({
       {isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading {label}…</p>
         : error ? <div className="m-5"><ErrorMessage>{error}</ErrorMessage></div>
           : <div className="overflow-x-auto"><Table aria-label={title}>
-            <TableHeader><TableRow>{columns.map((column, index) => <TableHead key={column} className={`${index < columns.length - 1 ? 'border-r border-line' : ''} ${column === 'Capacity' ? 'text-right' : index === columns.length - 1 ? 'text-right' : ''}`}>{column}</TableHead>)}</TableRow></TableHeader>
+            <TableHeader><TableRow>{columns.map((column, index) => <TableHead key={column} className={column === 'Capacity' || index === columns.length - 1 ? 'text-right' : ''}>{column}</TableHead>)}</TableRow></TableHeader>
             <TableBody>{visible.length ? visible.map((row) => renderRow(row)) : <TableRow><TableCell colSpan={columns.length} className="h-32 text-center">
               {search ? <p className="text-sm text-ink-muted">No {label} match “{search}”. Try another search.</p> : rows.length === 0 ? <div><p className="text-sm font-medium text-ink">{emptyTitle}</p><p className="mt-1 text-sm text-ink-muted">{emptyMessage}</p></div> : <p className="text-sm text-ink-muted">No {label} on this page.</p>}
             </TableCell></TableRow>}</TableBody>
           </Table></div>}
-      <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filtered.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} label={label} />
+      <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filtered.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label={label} />
     </CardContent>
   </Card>
 }
@@ -82,7 +82,7 @@ function ResolveOrganizationRow({ item, queueKey, resolve }: { item: Organizatio
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: queueKey }) },
   })
   return <TableRow>
-    <TableCell className="border-r border-line"><Identity name={item.name || 'Unnamed profile'} secondary={`Profile ${item.id}${item.ownerAccountId ? ` · Owner ${item.ownerAccountId}` : ''}`} /></TableCell>
+    <TableCell><Identity name={item.name || 'Unnamed profile'} secondary={`Profile ${item.id}${item.ownerAccountId ? ` · Owner ${item.ownerAccountId}` : ''}`} /></TableCell>
     <TableCell><form className="grid gap-2 sm:grid-cols-[minmax(140px,1fr)_minmax(160px,1.4fr)_auto]" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}>
       <Input aria-label={`Managing organization ID for ${item.name}`} placeholder="Organization ID" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} required />
       <Input aria-label={`Reason for linking ${item.name}`} placeholder="Reason for decision" value={reason} onChange={(event) => setReason(event.target.value)} required />
@@ -101,17 +101,18 @@ function OrganizationReconciliationQueue({ title, description, items, loading, e
   resolve: (id: string, orgId: string, reason: string) => Promise<unknown>
 }) {
   const [pageIndex, setPageIndex] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
   const visibleItems = items.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
   return <Card>
     <CardHeader className="border-b border-line"><div><CardTitle>{title}</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">{description}</p></div></CardHeader>
     <CardContent className="p-0">{loading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading organization-link queue…</p>
       : error ? <div className="m-5"><ErrorMessage>{error}</ErrorMessage></div>
-        : <div className="overflow-x-auto"><Table aria-label={title}><TableHeader><TableRow><TableHead className="border-r border-line">Profile</TableHead><TableHead>Assign managing organization</TableHead></TableRow></TableHeader>
+        : <div className="overflow-x-auto"><Table aria-label={title}><TableHeader><TableRow><TableHead>Profile</TableHead><TableHead>Assign managing organization</TableHead></TableRow></TableHeader>
           <TableBody>{visibleItems.length ? visibleItems.map((item) => <ResolveOrganizationRow key={item.id} item={item} queueKey={queueKey} resolve={(orgId, reason) => resolve(item.id, orgId, reason)} />)
             : <TableRow><TableCell colSpan={2} className="h-24 text-center text-sm text-ink-muted">No organization links need review.</TableCell></TableRow>}</TableBody>
         </Table></div>}
-      <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={items.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} label="organization links" />
+      <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={items.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label="organization links" />
     </CardContent>
   </Card>
 }
@@ -157,19 +158,20 @@ function VenueClaimsQueue() {
   const claimsQuery = useQuery({ queryKey: venueClaimsKey, queryFn: () => listPendingVenueClaims(session!.token), enabled: Boolean(session?.token) })
   const [review, setReview] = useState<{ claim: AdminVenueClaim; decision: 'approve' | 'reject' } | null>(null)
   const [pageIndex, setPageIndex] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
   const claims = claimsQuery.data?.claims ?? []
   const pageCount = Math.max(1, Math.ceil(claims.length / pageSize))
   const visibleClaims = claims.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
   return <Card><CardHeader className="border-b border-line"><div><CardTitle>Venue claims</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">Review ownership requests for venues in the directory.</p></div></CardHeader><CardContent className="p-0">
-    {claimsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading venue claims…</p> : claimsQuery.isError ? <div className="m-5"><ErrorMessage>{claimsQuery.error.message}</ErrorMessage></div> : <div className="overflow-x-auto"><Table aria-label="Pending venue claims"><TableHeader><TableRow><TableHead className="border-r border-line">Claimant</TableHead><TableHead className="border-r border-line">Venue</TableHead><TableHead className="border-r border-line">Evidence types</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>
+    {claimsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading venue claims…</p> : claimsQuery.isError ? <div className="m-5"><ErrorMessage>{claimsQuery.error.message}</ErrorMessage></div> : <div className="overflow-x-auto"><Table aria-label="Pending venue claims"><TableHeader><TableRow><TableHead>Claimant</TableHead><TableHead>Venue</TableHead><TableHead>Evidence types</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>
       {visibleClaims.length ? visibleClaims.map((item) => <TableRow key={item.id}>
-        <TableCell className="border-r border-line"><Identity name={item.claimantAccountId ? `Claim by ${item.claimantAccountId}` : 'Venue claim'} secondary={`Claim ${item.id}`} /></TableCell>
-        <TableCell className="border-r border-line"><Identity name="Venue profile" secondary={item.venueId || 'Venue unavailable'} />{item.designatedOrgId && <span className="mt-1 block break-all text-xs text-ink-muted">Organization: {item.designatedOrgId}</span>}</TableCell>
-        <TableCell className="border-r border-line">{(item.evidence ?? []).filter(Boolean).map((evidence) => evidence?.kind).filter(Boolean).join(', ') || 'No evidence listed'}</TableCell>
+        <TableCell><Identity name={item.claimantAccountId ? `Claim by ${item.claimantAccountId}` : 'Venue claim'} secondary={`Claim ${item.id}`} /></TableCell>
+        <TableCell><Identity name="Venue profile" secondary={item.venueId || 'Venue unavailable'} />{item.designatedOrgId && <span className="mt-1 block break-all text-xs text-ink-muted">Organization: {item.designatedOrgId}</span>}</TableCell>
+        <TableCell>{(item.evidence ?? []).filter(Boolean).map((evidence) => evidence?.kind).filter(Boolean).join(', ') || 'No evidence listed'}</TableCell>
         <TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label="Approve venue claim" icon={<span aria-hidden="true">✓</span>} showLabel onClick={() => setReview({ claim: item, decision: 'approve' })} /><AppIconAction label="Reject venue claim" icon={<span aria-hidden="true">×</span>} onClick={() => setReview({ claim: item, decision: 'reject' })} /></div></TableCell>
       </TableRow>) : <TableRow><TableCell colSpan={4} className="h-28 text-center text-sm text-ink-muted">No pending venue claims.</TableCell></TableRow>}
     </TableBody></Table></div>}
-    <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={claims.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} label="venue claims" />
+    <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={claims.length} onPageChange={(index) => setPageIndex(Math.min(index, pageCount - 1))} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label="venue claims" />
     <VenueClaimDecisionDialog key={`${review?.claim.id ?? 'no-claim'}-${review?.decision ?? 'approve'}`} claim={review?.claim ?? null} decision={review?.decision ?? 'approve'} onClose={() => setReview(null)} />
   </CardContent></Card>
 }
@@ -203,8 +205,8 @@ export function AccountsVendorsPage() {
     <div role="note" className="rounded-card border border-brand/15 bg-brand-soft/50 px-4 py-3 text-sm leading-6 text-ink-muted">The public directory shows active vendors only. Pending and suspended accounts are not included by the current listing endpoint.</div>
     <OrganizationReconciliationQueue title="Managing organization review" description="Assign the verified organization that manages each unlinked vendor profile." items={(reconciliation.data?.items ?? []).map((item) => ({ id: item.vendorId, name: item.businessName || 'Unnamed vendor', ownerAccountId: item.ownerAccountId }))} loading={reconciliation.isLoading} error={reconciliation.isError ? reconciliation.error.message : null} queueKey={vendorOrgQueueKey} resolve={(id, orgId, reason) => resolveVendorOrganization(session!.token, id, orgId, reason)} />
     <DirectoryTable title="Active vendor directory" description={`${vendors.length} active listings returned`} rows={vendors} isLoading={query.isLoading} error={query.isError ? query.error.message : null} search={search} onSearch={setSearch} emptyTitle="No active vendor listings" emptyMessage="Active vendors will appear here when available." columns={['Vendor', 'Tier', 'Actions']} label="vendors" renderRow={(item) => <TableRow key={item.id}>
-      <TableCell className="border-r border-line"><Identity name={item.businessName || 'Unnamed vendor'} secondary="Public directory listing" /></TableCell>
-      <TableCell className="border-r border-line">{item.tier === 'partnered' ? <Badge className="bg-brand-soft text-brand">Partnered</Badge> : item.tier === 'verified' ? <Badge className="bg-success-soft text-success">Verified</Badge> : <Badge variant="outline">Normal</Badge>}</TableCell>
+      <TableCell><Identity name={item.businessName || 'Unnamed vendor'} secondary="Public directory listing" /></TableCell>
+      <TableCell>{item.tier === 'partnered' ? <Badge className="bg-brand-soft text-brand">Partnered</Badge> : item.tier === 'verified' ? <Badge className="bg-success-soft text-success">Verified</Badge> : <Badge variant="outline">Normal</Badge>}</TableCell>
       <TableCell className="text-right"><div className="flex justify-end"><AppIconAction label={`Change directory tier for ${item.businessName || 'vendor'}`} icon={<span aria-hidden="true">◇</span>} onClick={() => setVendor(item)} /></div></TableCell>
     </TableRow>} />
     <ProfileStatusControl kind="vendor" />
@@ -295,9 +297,9 @@ export function AccountsVenuesPage() {
     <VenueClaimsQueue />
     <OrganizationReconciliationQueue title="Managing organization review" description="Assign the verified organization that manages each unlinked venue profile." items={(reconciliation.data?.items ?? []).map((item) => ({ id: item.venueId, name: item.name || 'Unnamed venue', ownerAccountId: item.ownerAccountId }))} loading={reconciliation.isLoading} error={reconciliation.isError ? reconciliation.error.message : null} queueKey={venueOrgQueueKey} resolve={(id, orgId, reason) => resolveVenueOrganization(session!.token, id, orgId, reason)} />
     <DirectoryTable title="Active venue directory" description={`${venues.length} active listings returned`} rows={venues} isLoading={query.isLoading} error={query.isError ? query.error.message : null} search={search} onSearch={setSearch} emptyTitle="No active venue listings" emptyMessage="Add a directory venue or wait for an active venue to appear." columns={['Venue', 'Capacity', 'Claim status', 'Actions']} label="venues" renderRow={(venue) => <TableRow key={venue.id}>
-      <TableCell className="border-r border-line"><Identity name={venue.name || 'Unnamed venue'} secondary={[venue.city, venue.country].filter(Boolean).join(', ') || 'Directory listing'} /></TableCell>
-      <TableCell className="border-r border-line text-right">{typeof venue.capacity === 'number' ? venue.capacity.toLocaleString() : '—'}</TableCell>
-      <TableCell className="border-r border-line">{venue.claimed === true ? <Badge className="bg-success-soft text-success">Claimed</Badge> : venue.claimed === false ? <Badge variant="outline">Unclaimed</Badge> : <Badge variant="outline">Unknown</Badge>}</TableCell>
+      <TableCell><Identity name={venue.name || 'Unnamed venue'} secondary={[venue.city, venue.country].filter(Boolean).join(', ') || 'Directory listing'} /></TableCell>
+      <TableCell className="text-right">{typeof venue.capacity === 'number' ? venue.capacity.toLocaleString() : '—'}</TableCell>
+      <TableCell>{venue.claimed === true ? <Badge className="bg-success-soft text-success">Claimed</Badge> : venue.claimed === false ? <Badge variant="outline">Unclaimed</Badge> : <Badge variant="outline">Unknown</Badge>}</TableCell>
       <TableCell className="text-right"><div className="flex justify-end"><AppIconAction label={`View ownership history for ${venue.name || 'venue'}`} icon={<span aria-hidden="true">◷</span>} onClick={() => setHistoryVenue(venue)} /></div></TableCell>
     </TableRow>} />
     <ProfileStatusControl kind="venue" />
@@ -326,7 +328,7 @@ export function AccountsOrganizationsPage() {
   return <section className="space-y-6">
     <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Accounts</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Organizations</h1><p className="mt-2 max-w-2xl text-sm text-ink-muted">Browse organizations, then look up commerce profiles and review pending tax exemptions.</p></div>
     <Card><CardHeader className="border-b border-line sm:grid-cols-[1fr_auto] sm:items-center"><div><CardTitle>Organization directory</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">{organizations.length} organizations</p></div><Input aria-label="Search organizations" placeholder="Search name, ID, or status" value={search} onChange={(event) => setSearch(event.target.value)} className="sm:w-72" /></CardHeader><CardContent className="p-0">
-      {organizationsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading organizations…</p> : organizationsQuery.isError ? <div className="m-5"><ErrorMessage>{organizationsQuery.error.message}</ErrorMessage></div> : <div className="overflow-x-auto"><Table aria-label="Organization directory"><TableHeader><TableRow><TableHead className="border-r border-line">Organization</TableHead><TableHead className="border-r border-line">Status</TableHead><TableHead className="text-right">ID</TableHead></TableRow></TableHeader><TableBody>{filteredOrganizations.length ? filteredOrganizations.map((organization) => <TableRow key={organization.id}><TableCell className="border-r border-line"><Identity name={organization.name || organization.slug || 'Unnamed organization'} secondary={organization.slug || organization.id} /></TableCell><TableCell className="border-r border-line">{organization.status || 'Unknown'}</TableCell><TableCell className="text-right break-all text-xs text-ink-muted">{organization.id}</TableCell></TableRow>) : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">{organizations.length ? 'No organizations match this search.' : 'No organizations found.'}</TableCell></TableRow>}</TableBody></Table></div>}
+      {organizationsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading organizations…</p> : organizationsQuery.isError ? <div className="m-5"><ErrorMessage>{organizationsQuery.error.message}</ErrorMessage></div> : <div className="overflow-x-auto"><Table aria-label="Organization directory"><TableHeader><TableRow><TableHead>Organization</TableHead><TableHead>Status</TableHead><TableHead className="text-right">ID</TableHead></TableRow></TableHeader><TableBody>{filteredOrganizations.length ? filteredOrganizations.map((organization) => <TableRow key={organization.id}><TableCell><Identity name={organization.name || organization.slug || 'Unnamed organization'} secondary={organization.slug || organization.id} /></TableCell><TableCell>{organization.status || 'Unknown'}</TableCell><TableCell className="text-right break-all text-xs text-ink-muted">{organization.id}</TableCell></TableRow>) : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">{organizations.length ? 'No organizations match this search.' : 'No organizations found.'}</TableCell></TableRow>}</TableBody></Table></div>}
     </CardContent></Card>
     <Card><CardHeader><CardTitle>Organization lookup</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">Enter an organization ID to retrieve its admin commerce profile.</p></CardHeader><CardContent>
       <form className="flex flex-col gap-2 sm:flex-row" onSubmit={submitLookup}><label htmlFor="org-id" className="sr-only">Organization ID</label><Input id="org-id" placeholder="Organization ID" value={orgId} onChange={(event) => setOrgId(event.target.value)} required className="sm:max-w-md" /><Button type="submit" disabled={!orgId.trim()}>Look up organization</Button></form>
@@ -355,7 +357,7 @@ export function AccountsOrganizationUsersPage() {
     <Card><CardHeader><CardTitle>Organization member roster</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">Select an organization or enter its ID to load its members.</p></CardHeader><CardContent><form className="flex flex-col gap-2 sm:flex-row" onSubmit={submitLookup}><label htmlFor="member-org-id" className="sr-only">Organization</label><select id="member-org-id" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand sm:max-w-md"><option value="">Choose an organization</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name || organization.slug || organization.id}</option>)}</select><Input aria-label="Organization ID" placeholder="Or enter organization ID" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} className="sm:max-w-md" /><Button type="submit" disabled={!organizationId.trim()}>Load members</Button></form>
       {organizationsQuery.isError && <div className="mt-4"><ErrorMessage>{organizationsQuery.error.message}</ErrorMessage></div>}
       {membersQuery.isLoading && <p className="mt-5 text-sm text-ink-muted">Loading organization members…</p>}{membersQuery.isError && <div className="mt-4"><ErrorMessage>{membersQuery.error.message}</ErrorMessage></div>}
-      {membersQuery.isSuccess && <div className="mt-5 overflow-x-auto border-t border-line pt-5"><Table aria-label="Organization members"><TableHeader><TableRow><TableHead className="border-r border-line">Member</TableHead><TableHead className="border-r border-line">Contact</TableHead><TableHead>Role</TableHead></TableRow></TableHeader><TableBody>{members.length ? members.map((member, index) => <TableRow key={member.id || member.userId || member.accountId || index}><TableCell className="border-r border-line"><Identity name={member.name || member.email || member.userId || member.accountId || member.id || 'Unnamed member'} secondary={member.status || member.id || member.userId || member.accountId || 'Organization member'} /></TableCell><TableCell className="border-r border-line">{member.email || member.phone || 'No contact details'}</TableCell><TableCell>{member.role || 'Member'}</TableCell></TableRow>) : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">No members found for this organization.</TableCell></TableRow>}</TableBody></Table></div>}
+      {membersQuery.isSuccess && <div className="mt-5 overflow-x-auto border-t border-line pt-5"><Table aria-label="Organization members"><TableHeader><TableRow><TableHead>Member</TableHead><TableHead>Contact</TableHead><TableHead>Role</TableHead></TableRow></TableHeader><TableBody>{members.length ? members.map((member, index) => <TableRow key={member.id || member.userId || member.accountId || index}><TableCell><Identity name={member.name || member.email || member.userId || member.accountId || member.id || 'Unnamed member'} secondary={member.status || member.id || member.userId || member.accountId || 'Organization member'} /></TableCell><TableCell>{member.email || member.phone || 'No contact details'}</TableCell><TableCell>{member.role || 'Member'}</TableCell></TableRow>) : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">No members found for this organization.</TableCell></TableRow>}</TableBody></Table></div>}
     </CardContent></Card>
   </section>
 }

@@ -146,6 +146,7 @@ export function DashboardPage() {
             pageSize={table.getState().pagination.pageSize}
             totalItems={table.getPrePaginationRowModel().rows.length}
             onPageChange={table.setPageIndex}
+            onPageSizeChange={table.setPageSize}
             label="events"
           />
         </CardContent>

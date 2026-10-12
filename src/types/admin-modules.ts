@@ -7,6 +7,8 @@ export type AdminModuleId =
   | 'commerce'
   | 'marketplace'
   | 'documents'
+  | 'contracts'
+  | 'invoices'
 
 export type AdminNavigationItem = {
   label: string

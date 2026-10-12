@@ -108,7 +108,7 @@ export function StaffAdminsPage() {
   const [pendingDelete, setPendingDelete] = useState<AdminUser | null>(null)
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(10)
   const adminsQuery = useQuery({
     queryKey: adminKeys.all,
     queryFn: () => listAdmins(session!.token),
@@ -157,10 +157,10 @@ export function StaffAdminsPage() {
         {adminsQuery.isLoading ? <p className="px-6 py-10 text-center text-sm text-ink-muted">Loading staff accounts…</p>
           : adminsQuery.isError ? <div className="p-5"><ErrorMessage message={adminsQuery.error.message} /></div>
             : <Table aria-label="Staff accounts">
-              <TableHeader><TableRow><TableHead className="border-r border-line">Admin</TableHead><TableHead className="border-r border-line">Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Admin</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>{visibleAdmins.length ? visibleAdmins.map((admin) => <TableRow key={admin.id}>
-                <TableCell className="border-r border-line"><div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-semibold text-brand">{admin.name.trim().slice(0, 1).toUpperCase() || '?'}</span><span className="min-w-0"><span className="block truncate font-medium text-ink">{admin.name}</span><span className="block truncate text-xs text-ink-muted">{admin.email}</span></span></div></TableCell>
-                <TableCell className="border-r border-line">{admin.status === 'active' ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{admin.status || 'Unknown'}</Badge>}</TableCell>
+                <TableCell><div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-semibold text-brand">{admin.name.trim().slice(0, 1).toUpperCase() || '?'}</span><span className="min-w-0"><span className="block truncate font-medium text-ink">{admin.name}</span><span className="block truncate text-xs text-ink-muted">{admin.email}</span></span></div></TableCell>
+                <TableCell>{admin.status === 'active' ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{admin.status || 'Unknown'}</Badge>}</TableCell>
                 <TableCell className="text-right"><div className="flex justify-end gap-1">
                   <AppIconAction label={`Manage roles for ${admin.name}`} icon={<ShieldCheck size={16} />} onClick={() => setRolesAdmin(admin)} showLabel />
                   <AppIconAction label={admin.status === 'active' ? `Suspend ${admin.name}` : `Reactivate ${admin.name}`} icon={admin.status === 'active' ? <Pause size={16} /> : <Play size={16} />} disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ admin, status: admin.status === 'active' ? 'suspended' : 'active' })} />
@@ -168,7 +168,7 @@ export function StaffAdminsPage() {
                 </div></TableCell>
               </TableRow>) : <TableRow><TableCell colSpan={3} className="h-28 text-center text-sm text-ink-muted">{filteredAdmins.length ? 'No admins on this page.' : search ? 'No admins match your search.' : 'No staff accounts yet.'}</TableCell></TableRow>}</TableBody>
             </Table>}
-        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredAdmins.length} onPageChange={(index) => { setPageIndex(Math.min(index, pageCount - 1)) }} label="admin users" />
+        <AppPagination pageIndex={pageIndex} pageSize={pageSize} totalItems={filteredAdmins.length} onPageChange={(index) => { setPageIndex(Math.min(index, pageCount - 1)) }} onPageSizeChange={(size) => { setPageSize(size); setPageIndex(0) }} label="admin users" />
       </CardContent>
     </Card>
 
