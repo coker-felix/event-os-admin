@@ -75,7 +75,7 @@ const itemIcons: Record<string, Icon> = {
   '/app/accounts/venues': MapPin,
   '/app/accounts/vendors': Storefront,
   '/app/accounts/kyc': Fingerprint,
-  '/app/events/directory': Calendar,
+  '/app/events': Calendar,
   '/app/ticketing/verify': QrCode,
   '/app/staff/admins': UserGear,
   '/app/staff/roles': LockKey,
@@ -124,8 +124,8 @@ const navigation: readonly AdminNavigationModule[] = [
     ],
   },
   { id: 'events', label: 'Events', icon: '◷', items: [
-    { label: 'Overview', to: '/app/events/overview' },
-    { label: 'Manage events', to: '/app/events/directory' },
+    { label: 'Overview', to: '/app/events' },
+    { label: 'Manage events', to: '/app/events' },
   ] },
   { id: 'ticketing', label: 'Ticketing', icon: '▣', items: [
     { label: 'Overview', to: '/app/ticketing/overview' },

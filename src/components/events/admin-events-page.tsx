@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
+import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth'
 import { AppDatePicker } from '@/components/ui/date-picker'
 import { AppIconAction } from '@/components/ui/app-icon-action'
@@ -7,19 +9,22 @@ import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FilterTabs } from '@/components/ui/filter-tabs'
 import { formatDate } from '@/lib/date-format'
-import { listAdminOrganizations, type AdminOrganization } from '@/services/admin-account-directory'
+import { listAdminOrganizations, listVenueDirectory, getAdminVenue, type AdminOrganization, type VenueDirectoryEntry } from '@/services/admin-account-directory'
+import { listEventCategories, type EventCategory } from '@/services/admin-platform'
 import {
-  createAdminEvent, createAdminTicketType, deleteAdminTicketType, getAdminEvent, listAdminEventOrders, listAdminEvents, listAdminTicketTypes, publishAdminEvent, updateAdminEvent, updateAdminTicketType,
-  type AdminEvent, type AdminEventInput, type AdminOrder, type AdminTicketType, type AdminTicketTypeInput,
+  createAdminEvent, createAdminRecurringEvents, createAdminTicketType, deleteAdminTicketType, getAdminEvent, listAdminEventOrders, listAdminEvents, listAdminTicketTypes, publishAdminEvent, updateAdminEvent, updateAdminTicketType,
+  type AdminEvent, type AdminEventInput, type AdminRecurringEventsInput, type AdminOrder, type AdminTicketType, type AdminTicketTypeInput,
 } from '@/services/admin-events-ticketing'
 
 const eventsKey = ['qk-admin-events'] as const
 const orgsKey = ['qk-admin-organizations'] as const
+const venuesKey = ['qk-admin-venues'] as const
 type EventStatusFilter = '' | 'draft' | 'published' | 'cancelled' | 'completed'
 
 function eventKey(id: string) { return [...eventsKey, 'detail', id] as const }
@@ -82,12 +87,22 @@ function ErrorMessage({ children }: { children: string }) {
 }
 
 function EventForm({
-  event, organizations, onClose, onSaved, inSheet = false,
-}: { event?: AdminEvent | null; organizations: AdminOrganization[]; onClose: () => void; onSaved: (event: AdminEvent) => void; inSheet?: boolean }) {
+  event, organizations, venues, categories, onClose, onSaved,
+}: { event?: AdminEvent | null; organizations: AdminOrganization[]; venues: VenueDirectoryEntry[]; categories: EventCategory[]; onClose: () => void; onSaved: (event: AdminEvent) => void }) {
   const { session } = useAuth()
   const [orgId, setOrgId] = useState(event?.orgId || '')
   const [title, setTitle] = useState(event?.title || '')
   const [description, setDescription] = useState(event?.description || '')
+  const [recurring, setRecurring] = useState(false)
+  const [recurrencePattern, setRecurrencePattern] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'>('weekly')
+  const [recurrenceInterval, setRecurrenceInterval] = useState('1')
+  const [recurrenceCount, setRecurrenceCount] = useState('4')
+  const [recurrenceRule, setRecurrenceRule] = useState('FREQ=WEEKLY;INTERVAL=1;COUNT=4')
+  const [variantRule, setVariantRule] = useState<'manual' | 'publish_N_days_before' | 'publish_on_sellout'>('manual')
+  const [publishLeadDays, setPublishLeadDays] = useState('')
+  const [ticketTemplates, setTicketTemplates] = useState<Array<{ name: string; priceMinor: string; total: string; admissionsPerUnit: string }>>([])
+  const [visibility, setVisibility] = useState<'public' | 'private'>(event?.visibility === 'private' ? 'private' : 'public')
+  const [currency, setCurrency] = useState(event?.currency || 'GHS')
   const [venueId, setVenueId] = useState(event?.venueId || '')
   const start = eventDateParts(event?.startsAt)
   const end = eventDateParts(event?.endsAt)
@@ -102,23 +117,43 @@ function EventForm({
   const [tags, setTags] = useState((event?.tags ?? []).filter((tag): tag is string => Boolean(tag)).join(', '))
   const [categoryId, setCategoryId] = useState(event?.categoryId ? String(event.categoryId) : '')
   const [slug, setSlug] = useState(event?.customSlug || '')
+  const [activeTab, setActiveTab] = useState('details')
+  const [validationMessage, setValidationMessage] = useState('')
   const queryClient = useQueryClient()
   const mutation = useMutation({
-    mutationFn: async (input: AdminEventInput) => event
-      ? updateAdminEvent(session!.token, event.id, input)
-      : createAdminEvent(session!.token, orgId, input),
+    mutationFn: async (input: AdminEventInput | AdminRecurringEventsInput) => {
+      if (event) return updateAdminEvent(session!.token, event.id, input as AdminEventInput)
+      if (recurring) {
+        const result = await createAdminRecurringEvents(session!.token, orgId, input as AdminRecurringEventsInput)
+        const firstEvent = result.events?.find((row): row is AdminEvent => Boolean(row?.id))
+        if (!firstEvent) throw new Error('The recurring event request succeeded but returned no events.')
+        return firstEvent
+      }
+      return createAdminEvent(session!.token, orgId, input as AdminEventInput)
+    },
     onSuccess: async (saved) => {
       await Promise.all([queryClient.invalidateQueries({ queryKey: eventsKey }), queryClient.invalidateQueries({ queryKey: eventKey(saved.id) })])
+      toast.success(event ? 'Event updated' : recurring ? 'Recurring event series created' : 'Draft event created', { description: saved.title || title.trim() })
       onSaved(saved)
     },
+    onError: (error) => toast.error(event ? 'Could not update event' : 'Could not create event', { description: error.message }),
   })
   function submit(e: FormEvent) {
     e.preventDefault()
     const startsAt = toUnixSeconds(startsOn, startsTime)
     const endsAt = toUnixSeconds(endsOn, endsTime)
-    if (startsAt === null || endsAt === null || endsAt <= startsAt) return
-    mutation.mutate({
+    if (!event && !orgId) { setActiveTab('details'); setValidationMessage('Select an organization before creating the event.'); return }
+    if (recurring && (!Number.isInteger(Number(recurrenceInterval)) || Number(recurrenceInterval) < 1 || !Number.isInteger(Number(recurrenceCount)) || Number(recurrenceCount) < 1 || Number(recurrenceCount) > 52)) { setActiveTab('recurrence'); setValidationMessage('Set an interval of at least 1 and between 1 and 52 occurrences.'); return }
+    if (recurring && recurrencePattern === 'custom' && !recurrenceRule.trim()) { setActiveTab('recurrence'); setValidationMessage('Enter a recurrence rule for the custom schedule.'); return }
+    if (recurring && variantRule === 'publish_N_days_before' && (!Number.isInteger(Number(publishLeadDays)) || Number(publishLeadDays) < 0)) { setActiveTab('recurrence'); setValidationMessage('Enter how many days before each occurrence it should be published.'); return }
+    if (recurring && ticketTemplates.some((ticket) => !ticket.name.trim() || ticket.priceMinor === '' || ticket.total === '' || !Number.isInteger(Number(ticket.priceMinor)) || Number(ticket.priceMinor) < 0 || !Number.isInteger(Number(ticket.total)) || Number(ticket.total) < 1)) { setActiveTab('recurrence'); setValidationMessage('Each ticket template needs a name, valid price, and quantity greater than zero.'); return }
+    if (!title.trim()) { setActiveTab('details'); setValidationMessage('Enter an event title.'); return }
+    if (startsAt === null || endsAt === null) { setActiveTab('schedule'); setValidationMessage('Choose valid start and end dates and times.'); return }
+    if (endsAt <= startsAt) { setActiveTab('schedule'); setValidationMessage('The event end must be after its start.'); return }
+    setValidationMessage('')
+    const common = {
       title: title.trim(), startsAt, endsAt,
+      ...(currency.trim() ? { currency: currency.trim().toUpperCase() } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(venueId.trim() ? { venueId: venueId.trim() } : {}),
       ...(categoryId ? { categoryId: Number(categoryId) } : {}),
@@ -126,26 +161,62 @@ function EventForm({
       ...(countryCode.trim() ? { countryCode: countryCode.trim().toUpperCase() } : {}),
       ...(subdivisionCode.trim() ? { subdivisionCode: subdivisionCode.trim().toUpperCase() } : {}),
       ...(timezone.trim() ? { timezone: timezone.trim() } : {}),
-      ...(slug.trim() ? { customSlug: slug.trim() } : {}),
       ...(tags.trim() ? { tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean) } : {}),
-    })
+    }
+    if (recurring && !event) {
+      mutation.mutate({
+        ...common,
+        recurrence: recurrencePattern === 'custom'
+          ? { pattern: 'custom', rule: recurrenceRule.trim() }
+          : { pattern: recurrencePattern, interval: Number(recurrenceInterval), count: Number(recurrenceCount) },
+        variantRule,
+        ...(variantRule === 'publish_N_days_before' ? { publishLeadDays: Number(publishLeadDays) } : {}),
+        ...(ticketTemplates.length ? { ticketTemplates: ticketTemplates.map((ticket) => ({ name: ticket.name.trim(), priceMinor: Number(ticket.priceMinor), total: Number(ticket.total), admissionsPerUnit: ticket.admissionsPerUnit ? Number(ticket.admissionsPerUnit) : 1 })) } : {}),
+      })
+    } else {
+      mutation.mutate({ ...common, ...(visibility ? { visibility } : {}), ...(slug.trim() ? { customSlug: slug.trim() } : {}) })
+    }
   }
   const startsAt = toUnixSeconds(startsOn, startsTime)
   const endsAt = toUnixSeconds(endsOn, endsTime)
-  return <form className={inSheet ? 'space-y-4 px-6 pb-6' : 'space-y-4'} onSubmit={submit}>
-    {!event && <label className="block space-y-1.5 text-sm font-medium">Organization ID<Input list="event-organization-options" value={orgId} onChange={(e) => setOrgId(e.target.value)} required placeholder="Select or enter organization ID" /><datalist id="event-organization-options">{organizations.map((org) => <option key={org.id} value={org.id}>{org.name || org.id}{org.status ? ` · ${org.status}` : ''}</option>)}</datalist></label>}
-    <label className="block space-y-1.5 text-sm font-medium">Event title<Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={180} /></label>
-    <label className="block space-y-1.5 text-sm font-medium">Description<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label>
-    <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Starts on<div><AppDatePicker value={startsOn} onValueChange={setStartsOn} /></div></label><label className="block space-y-1.5 text-sm font-medium">Start time<input type="time" value={startsTime} onChange={(e) => setStartsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
-    <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Ends on<div><AppDatePicker value={endsOn} onValueChange={setEndsOn} /></div></label><label className="block space-y-1.5 text-sm font-medium">End time<input type="time" value={endsTime} onChange={(e) => setEndsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
-    {startsOn && <p className="text-xs text-ink-muted">Starts {formatDate(startsOn)}{startsTime ? ` at ${startsTime}` : ''}; event timestamps are saved using this browser’s timezone.</p>}
-    <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Venue ID <span className="font-normal text-ink-muted">(optional)</span><Input value={venueId} onChange={(e) => setVenueId(e.target.value)} /></label><label className="block space-y-1.5 text-sm font-medium">Timezone<Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Africa/Accra" /></label></div>
-    <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Attendance<select value={attendanceType} onChange={(e) => setAttendanceType(e.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand"><option value="in_person">In person</option><option value="virtual">Virtual</option><option value="hybrid">Hybrid</option></select></label><label className="block space-y-1.5 text-sm font-medium">Country code <span className="font-normal text-ink-muted">(optional)</span><Input value={countryCode} onChange={(e) => setCountryCode(e.target.value)} maxLength={2} placeholder="GH" /></label></div>
-    <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Subdivision code <span className="font-normal text-ink-muted">(optional)</span><Input value={subdivisionCode} onChange={(e) => setSubdivisionCode(e.target.value)} placeholder="GH-AA" /></label><label className="block space-y-1.5 text-sm font-medium">Tags <span className="font-normal text-ink-muted">(comma separated)</span><Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="music, festival" /></label></div>
-    <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Category ID <span className="font-normal text-ink-muted">(optional)</span><Input inputMode="numeric" value={categoryId} onChange={(e) => setCategoryId(e.target.value.replace(/\D/g, ''))} /></label><label className="block space-y-1.5 text-sm font-medium">Custom slug <span className="font-normal text-ink-muted">(optional)</span><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></label></div>
-    {mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}
-    {startsAt !== null && endsAt !== null && endsAt <= startsAt && <ErrorMessage>Event end must be after the start.</ErrorMessage>}
-    <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={mutation.isPending || !title.trim() || !orgId && !event || startsAt === null || endsAt === null || endsAt <= startsAt}>{mutation.isPending ? 'Saving…' : event ? 'Save event' : 'Create draft'}</Button></DialogFooter>
+  return <form id="admin-event-form" className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
+    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(String(value))} className="min-h-0 flex-1 gap-5 px-6">
+      <TabsList variant="line" aria-label="Event form sections" className="w-full overflow-x-auto">
+        <TabsTrigger value="details">Event</TabsTrigger><TabsTrigger value="schedule">Schedule</TabsTrigger>{!event && <TabsTrigger value="recurrence">Recurrence</TabsTrigger>}<TabsTrigger value="location">Location</TabsTrigger><TabsTrigger value="settings">Settings</TabsTrigger>
+      </TabsList>
+      <TabsContent value="details" className="space-y-4 pb-6">
+        {!event && <label className="block space-y-1.5 text-sm font-medium">Organization<select value={orgId} onChange={(e) => setOrgId(e.target.value)} required disabled={!organizations.length} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="">{organizations.length ? 'Select an organization' : 'No organizations available'}</option>{organizations.map((org) => <option key={org.id} value={org.id}>{org.name || 'Unnamed organization'}{org.status ? ` · ${org.status}` : ''}</option>)}</select></label>}
+        <label className="block space-y-1.5 text-sm font-medium">Event title<Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={180} /></label>
+        <label className="block space-y-1.5 text-sm font-medium">Description<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={6} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label>
+        {!event && <label className="flex items-center gap-3 rounded-lg border border-line p-3 text-sm font-medium"><input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} className="size-4 accent-brand" />Create a recurring event series</label>}
+      </TabsContent>
+      {!event && <TabsContent value="recurrence" className="space-y-4 pb-6">
+        <label className="block space-y-1.5 text-sm font-medium">Schedule pattern<select value={recurrencePattern} onChange={(e) => setRecurrencePattern(e.target.value as typeof recurrencePattern)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="custom">Custom (RFC 5545 rule)</option></select></label>
+        {recurrencePattern === 'custom' ? <label className="block space-y-1.5 text-sm font-medium">Recurrence rule<Input value={recurrenceRule} onChange={(e) => setRecurrenceRule(e.target.value)} placeholder="FREQ=WEEKLY;INTERVAL=1;COUNT=4" /><span className="text-xs font-normal text-ink-muted">Supported parts: FREQ, INTERVAL, BYDAY, BYMONTHDAY, BYMONTH, COUNT, UNTIL.</span></label> : <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Repeat every<Input type="number" min="1" step="1" value={recurrenceInterval} onChange={(e) => setRecurrenceInterval(e.target.value)} /></label><label className="block space-y-1.5 text-sm font-medium">Number of occurrences<Input type="number" min="1" max="52" step="1" value={recurrenceCount} onChange={(e) => setRecurrenceCount(e.target.value)} /></label></div>}
+        <label className="block space-y-1.5 text-sm font-medium">Occurrence publishing<select value={variantRule} onChange={(e) => setVariantRule(e.target.value as typeof variantRule)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="manual">Publish manually</option><option value="publish_N_days_before">Publish a set number of days before</option><option value="publish_on_sellout">Publish when the previous occurrence sells out</option></select></label>
+        {variantRule === 'publish_N_days_before' && <label className="block space-y-1.5 text-sm font-medium">Publish lead days<Input type="number" min="0" step="1" value={publishLeadDays} onChange={(e) => setPublishLeadDays(e.target.value)} /></label>}
+        <div className="space-y-3"><div className="flex items-center justify-between"><div><h3 className="text-sm font-medium">Ticket templates</h3><p className="text-xs text-ink-muted">Optionally apply the same ticket setup to each occurrence.</p></div><Button type="button" variant="outline" onClick={() => setTicketTemplates((rows) => [...rows, { name: '', priceMinor: '', total: '', admissionsPerUnit: '1' }])}>Add ticket template</Button></div>{ticketTemplates.map((ticket, index) => <div key={index} className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-4"><label className="space-y-1 text-xs font-medium">Name<Input value={ticket.name} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))} /></label><label className="space-y-1 text-xs font-medium">Price (minor units)<Input type="number" min="0" step="1" value={ticket.priceMinor} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, priceMinor: e.target.value } : row))} /></label><label className="space-y-1 text-xs font-medium">Quantity<Input type="number" min="1" step="1" value={ticket.total} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, total: e.target.value } : row))} /></label><div className="flex items-end justify-between gap-2"><label className="space-y-1 text-xs font-medium">Admissions / unit<Input type="number" min="1" step="1" value={ticket.admissionsPerUnit} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, admissionsPerUnit: e.target.value } : row))} /></label><Button type="button" variant="ghost" aria-label={`Remove ticket template ${index + 1}`} onClick={() => setTicketTemplates((rows) => rows.filter((_, i) => i !== index))}>Remove</Button></div></div>)}</div>
+      </TabsContent>}
+      <TabsContent value="schedule" className="space-y-4 pb-6">
+        <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Starts on<div><AppDatePicker value={startsOn} onValueChange={setStartsOn} /></div></label><label className="block space-y-1.5 text-sm font-medium">Start time<input type="time" value={startsTime} onChange={(e) => setStartsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Ends on<div><AppDatePicker value={endsOn} onValueChange={setEndsOn} /></div></label><label className="block space-y-1.5 text-sm font-medium">End time<input type="time" value={endsTime} onChange={(e) => setEndsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
+        {startsOn && <p className="text-xs text-ink-muted">Starts {formatDate(startsOn)}{startsTime ? ` at ${startsTime}` : ''}; saved in the selected timezone.</p>}
+      </TabsContent>
+      <TabsContent value="location" className="space-y-4 pb-6">
+        <label className="block space-y-1.5 text-sm font-medium">Attendance<select value={attendanceType} onChange={(e) => setAttendanceType(e.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="in_person">In person</option><option value="virtual">Virtual</option><option value="hybrid">Hybrid</option></select></label>
+        <label className="block space-y-1.5 text-sm font-medium">Venue <span className="font-normal text-ink-muted">(optional)</span><select value={venueId} onChange={(e) => setVenueId(e.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="">No venue selected</option>{venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name || 'Unnamed venue'}{venue.city ? ` · ${venue.city}` : ''}</option>)}</select></label>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Country code<Input value={countryCode} onChange={(e) => setCountryCode(e.target.value.toUpperCase())} maxLength={2} placeholder="GH" /></label><label className="block space-y-1.5 text-sm font-medium">Subdivision code<Input value={subdivisionCode} onChange={(e) => setSubdivisionCode(e.target.value.toUpperCase())} placeholder="GH-AA" /></label></div>
+      </TabsContent>
+      <TabsContent value="settings" className="space-y-4 pb-6">
+        <div className="grid gap-4 sm:grid-cols-2">{!recurring && <label className="block space-y-1.5 text-sm font-medium">Visibility<select value={visibility} onChange={(e) => setVisibility(e.target.value as 'public' | 'private')} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="public">Public</option><option value="private">Private</option></select></label>}<label className="block space-y-1.5 text-sm font-medium">Currency<Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} placeholder="GHS" /></label></div>
+        <label className="block space-y-1.5 text-sm font-medium">Timezone<Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Africa/Accra" /></label>
+        <label className="block space-y-1.5 text-sm font-medium">Category<select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="">No category</option>{categories.filter((category) => category.active || String(category.id) === categoryId).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        <label className="block space-y-1.5 text-sm font-medium">Tags <span className="font-normal text-ink-muted">(comma separated)</span><Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="music, festival" /></label>
+        <label className="block space-y-1.5 text-sm font-medium">Custom slug <span className="font-normal text-ink-muted">(optional)</span><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></label>
+      </TabsContent>
+    </Tabs>
+    <div className="px-6">{mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}{validationMessage && <ErrorMessage>{validationMessage}</ErrorMessage>}{startsAt !== null && endsAt !== null && endsAt <= startsAt && <ErrorMessage>Event end must be after the start.</ErrorMessage>}</div>
+    <SheetFooter className="mt-5 border-t border-line"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" form="admin-event-form" disabled={mutation.isPending || !title.trim() || (!orgId && !event) || startsAt === null || endsAt === null || endsAt <= startsAt}>{mutation.isPending ? 'Saving…' : event ? 'Save changes' : 'Create draft'}</Button></SheetFooter>
   </form>
 }
 
@@ -173,7 +244,8 @@ function TicketTypeEditor({ eventId, ticket, currency, onDone }: { eventId: stri
       }
       return ticket ? updateAdminTicketType(session!.token, eventId, ticket.id, input) : createAdminTicketType(session!.token, eventId, input)
     },
-    onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ticketKey(eventId) }), client.invalidateQueries({ queryKey: eventKey(eventId) })]); onDone() },
+    onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ticketKey(eventId) }), client.invalidateQueries({ queryKey: eventKey(eventId) })]); toast.success(ticket ? 'Ticket type updated' : 'Ticket type added'); onDone() },
+    onError: (error) => toast.error('Could not save ticket type', { description: error.message }),
   })
   return <Sheet open onOpenChange={(open) => { if (!open) onDone() }}><SheetContent className="w-full overflow-y-auto sm:max-w-lg">
     <SheetHeader><SheetTitle>{ticket ? 'Edit ticket type' : 'Add ticket type'}</SheetTitle><SheetDescription>Set ticket inventory, price, and sales window for this event.</SheetDescription></SheetHeader>
@@ -192,37 +264,47 @@ function TicketTypeEditor({ eventId, ticket, currency, onDone }: { eventId: stri
   </SheetContent></Sheet>
 }
 
-function EventDetails({ eventId, onClose, onEventChanged }: { eventId: string | null; onClose: () => void; onEventChanged: () => void }) {
+export function AdminEventDetailsPage({ eventId }: { eventId: string }) {
+  const navigate = useNavigate()
   const { session } = useAuth()
   const client = useQueryClient()
   const [editing, setEditing] = useState(false)
+  const [activeSection, setActiveSection] = useState('overview')
   const [ticketEditor, setTicketEditor] = useState<AdminTicketType | null | undefined>(undefined)
   const [ticketPage, setTicketPage] = useState(0)
   const [ticketPageSize, setTicketPageSize] = useState(10)
   const [ordersPage, setOrdersPage] = useState(0)
   const [orderPageSize, setOrderPageSize] = useState(25)
-  const detailsQuery = useQuery({ queryKey: eventKey(eventId || ''), queryFn: () => getAdminEvent(session!.token, eventId!), enabled: Boolean(session?.token && eventId) })
-  const ticketsQuery = useQuery({ queryKey: ticketKey(eventId || ''), queryFn: () => listAdminTicketTypes(session!.token, eventId!), enabled: Boolean(session?.token && eventId) })
-  const ordersQuery = useQuery({ queryKey: ordersKey(eventId || '', ordersPage * orderPageSize), queryFn: () => listAdminEventOrders(session!.token, eventId!, orderPageSize, ordersPage * orderPageSize), enabled: Boolean(session?.token && eventId) })
-  const publish = useMutation({ mutationFn: () => publishAdminEvent(session!.token, eventId!), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: eventsKey }), client.invalidateQueries({ queryKey: eventKey(eventId || '') })]); onEventChanged() } })
-  const removeTicket = useMutation({ mutationFn: (id: string) => deleteAdminTicketType(session!.token, eventId!, id), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ticketKey(eventId || '') }), client.invalidateQueries({ queryKey: eventKey(eventId || '') })]) } })
+  const detailsQuery = useQuery({ queryKey: eventKey(eventId), queryFn: () => getAdminEvent(session!.token, eventId), enabled: Boolean(session?.token) })
+  const ticketsQuery = useQuery({ queryKey: ticketKey(eventId), queryFn: () => listAdminTicketTypes(session!.token, eventId), enabled: Boolean(session?.token) })
+  const ordersQuery = useQuery({ queryKey: ordersKey(eventId, ordersPage * orderPageSize), queryFn: () => listAdminEventOrders(session!.token, eventId, orderPageSize, ordersPage * orderPageSize), enabled: Boolean(session?.token && activeSection === 'orders') })
+  const publish = useMutation({ mutationFn: () => publishAdminEvent(session!.token, eventId), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: eventsKey }), client.invalidateQueries({ queryKey: eventKey(eventId) })]); toast.success('Event published') }, onError: (error) => toast.error('Could not publish event', { description: error.message }) })
+  const removeTicket = useMutation({ mutationFn: (id: string) => deleteAdminTicketType(session!.token, eventId, id), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ticketKey(eventId) }), client.invalidateQueries({ queryKey: eventKey(eventId) })]); toast.success('Ticket type deleted') }, onError: (error) => toast.error('Could not delete ticket type', { description: error.message }) })
   const event = detailsQuery.data?.event
   const tickets = ticketsQuery.data?.ticketTypes ?? (Array.isArray(detailsQuery.data?.ticketTypes) ? detailsQuery.data.ticketTypes.filter((ticket): ticket is AdminTicketType => Boolean(ticket?.id)) : [])
   const ticketPageCount = Math.max(1, Math.ceil(tickets.length / ticketPageSize))
   const visibleTickets = tickets.slice(ticketPage * ticketPageSize, (ticketPage + 1) * ticketPageSize)
   const orders = ordersQuery.data?.orders ?? []
-  return <Dialog open={Boolean(eventId)} onOpenChange={(open) => { if (!open) onClose() }}><DialogContent className="max-h-[min(92vh,900px)] overflow-y-auto sm:max-w-5xl">
-    <DialogHeader><DialogTitle>{event?.title || 'Event workspace'}</DialogTitle><DialogDescription>Review and manage event details, ticket types, publication, and orders.</DialogDescription></DialogHeader>
+  const venueQuery = useQuery({ queryKey: ['qk-admin-venue', event?.venueId], queryFn: () => getAdminVenue(session!.token, event!.venueId!), enabled: Boolean(session?.token && event?.venueId) })
+  return <section className="space-y-6">
+    <div><Button variant="ghost" className="mb-2 px-0" onClick={() => navigate({ to: '/app/events' })}>← Events</Button><h1 className="text-xl font-semibold tracking-tight">{event?.title || 'Event details'}</h1><p className="mt-1 max-w-2xl text-sm text-ink-muted">Review event setup, ticket inventory, publication, and orders.</p></div>
     {detailsQuery.isLoading ? <p className="py-8 text-center text-sm text-ink-muted">Loading event…</p> : detailsQuery.isError ? <ErrorMessage>{detailsQuery.error.message}</ErrorMessage> : event ? <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-muted p-4"><div className="flex flex-wrap items-center gap-3">{statusBadge(event.status)}<span className="text-sm text-ink-muted">Organization {event.orgId || 'unavailable'}</span></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setEditing((value) => !value); setTicketEditor(undefined) }}>{editing ? 'Close editor' : 'Edit event'}</Button>{event.status === 'draft' && <Button disabled={publish.isPending} onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish event'}</Button>}</div></div>
-      {publish.isError && <ErrorMessage>{publish.error.message}</ErrorMessage>}
-      {editing ? <Card><CardHeader><CardTitle>Edit event</CardTitle></CardHeader><CardContent><EventForm event={event} organizations={[]} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onEventChanged() }} /></CardContent></Card> : <Card><CardHeader><CardTitle>Event details</CardTitle></CardHeader><CardContent><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-xs text-ink-muted">Starts</dt><dd className="mt-1 text-sm">{displayDateTime(event.startsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Ends</dt><dd className="mt-1 text-sm">{displayDateTime(event.endsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Venue ID</dt><dd className="mt-1 break-all text-sm">{event.venueId || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Attendance</dt><dd className="mt-1 text-sm">{event.attendanceType || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Currency</dt><dd className="mt-1 text-sm">{event.currency || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Visibility</dt><dd className="mt-1 text-sm">{event.visibility || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Category ID</dt><dd className="mt-1 text-sm">{event.categoryId ?? 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Country</dt><dd className="mt-1 text-sm">{event.countryCode || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Slug</dt><dd className="mt-1 break-all text-sm">{event.customSlug || 'Not provided'}</dd></div></dl>{event.description && <p className="mt-5 whitespace-pre-wrap border-t border-line pt-4 text-sm leading-6 text-ink-muted">{event.description}</p>}</CardContent></Card>}
+      <Tabs value={activeSection} onValueChange={(value) => setActiveSection(String(value))}>
+        <TabsList variant="line" aria-label="Event management sections" className="w-full justify-start overflow-x-auto"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="tickets">Ticket types</TabsTrigger><TabsTrigger value="orders">Orders</TabsTrigger><TabsTrigger value="venue">Venue</TabsTrigger><TabsTrigger value="coupons">Coupons</TabsTrigger><TabsTrigger value="fees">Fee overrides</TabsTrigger><TabsTrigger value="channels">Publish channels</TabsTrigger></TabsList>
+        <TabsContent value="overview" className="space-y-5">
+          {editing ? <Sheet open onOpenChange={(open) => { if (!open) setEditing(false) }}><SheetContent className="w-full overflow-y-auto sm:max-w-4xl"><SheetHeader><SheetTitle>Edit event</SheetTitle><SheetDescription>Update the event details and schedule.</SheetDescription></SheetHeader><EventForm event={event} organizations={[]} venues={[]} categories={[]} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} /></SheetContent></Sheet> : <Card><CardContent className="pt-6"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-xs text-ink-muted">Starts</dt><dd className="mt-1 text-sm">{displayDateTime(event.startsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Ends</dt><dd className="mt-1 text-sm">{displayDateTime(event.endsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Venue</dt><dd className="mt-1 text-sm">{venueQuery.data?.name || event.venueId || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Attendance</dt><dd className="mt-1 text-sm">{event.attendanceType || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Currency</dt><dd className="mt-1 text-sm">{event.currency || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Visibility</dt><dd className="mt-1 text-sm">{event.visibility || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Category</dt><dd className="mt-1 text-sm">{event.categoryId ?? 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Country</dt><dd className="mt-1 text-sm">{event.countryCode || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Slug</dt><dd className="mt-1 break-all text-sm">{event.customSlug || 'Not provided'}</dd></div></dl>{event.description && <p className="mt-5 whitespace-pre-wrap border-t border-line pt-4 text-sm leading-6 text-ink-muted">{event.description}</p>}</CardContent></Card>}
+        </TabsContent>
+        <TabsContent value="tickets" className="space-y-4">
       <Card><CardContent className="p-0">{ticketEditor === undefined && <div className="flex justify-end p-4"><Button onClick={() => setTicketEditor(null)}>Add ticket type</Button></div>}<DataTable data={visibleTickets} headers={['Ticket type', { label: 'Price', className: 'text-right' }, { label: 'Sold / total', className: 'text-right' }, 'Status', { label: 'Actions', className: 'text-right' }]} label="Event ticket types" loading={ticketsQuery.isLoading} loadingMessage="Loading ticket types…" error={ticketsQuery.isError ? ticketsQuery.error.message : null} emptyMessage="No ticket types yet. Add a ticket type before publishing." pagination={{ pageIndex: ticketPage, pageSize: ticketPageSize, totalItems: tickets.length, onPageChange: (next) => setTicketPage(Math.min(next, ticketPageCount - 1)), onPageSizeChange: (size) => { setTicketPageSize(size); setTicketPage(0) } }} renderRow={(ticket) => <TableRow key={ticket.id}><TableCell><span className="font-medium">{ticket.name || 'Unnamed ticket type'}</span><span className="mt-0.5 block text-xs text-ink-muted">{ticket.id}</span></TableCell><TableCell className="text-right tabular-nums">{formatMinor(ticket.priceMinor, event.currency)}</TableCell><TableCell className="text-right tabular-nums">{ticket.sold ?? 0} / {ticket.total ?? '—'}</TableCell><TableCell>{ticket.status || 'Unknown'}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label={`Edit ${ticket.name || 'ticket type'}`} icon={<span aria-hidden="true">✎</span>} onClick={() => setTicketEditor(ticket)} /><AppIconAction label={`Delete ${ticket.name || 'ticket type'}`} icon={<span aria-hidden="true">×</span>} disabled={removeTicket.isPending || Number(ticket.sold ?? 0) > 0} onClick={() => { if (window.confirm('Delete this unsold ticket type?')) removeTicket.mutate(ticket.id) }} /></div></TableCell></TableRow>} containerClassName="" />{removeTicket.isError && <div className="px-5 py-3"><ErrorMessage>{removeTicket.error.message}</ErrorMessage></div>}</CardContent></Card>
       {ticketEditor !== undefined && <TicketTypeEditor key={ticketEditor?.id || 'new-ticket'} eventId={event.id} ticket={ticketEditor} currency={event.currency} onDone={() => { setTicketEditor(undefined); setTicketPage(0) }} />}
-      <Card><CardContent className="p-0"><DataTable data={orders} headers={['Order', 'Buyer contact', 'Status', { label: 'Total', className: 'text-right' }]} label="Event orders" loading={ordersQuery.isLoading} loadingMessage="Loading orders…" error={ordersQuery.isError ? ordersQuery.error.message : null} emptyMessage="No orders for this event yet." pagination={{ pageIndex: ordersPage, pageSize: orderPageSize, totalItems: ordersQuery.data?.total ?? 0, onPageChange: setOrdersPage, onPageSizeChange: (size) => { setOrderPageSize(size); setOrdersPage(0) } }} renderRow={(order) => <OrderRow key={order.id} order={order} />} containerClassName="" /></CardContent></Card>
+        </TabsContent>
+        <TabsContent value="orders"><Card><CardContent className="p-0"><DataTable data={orders} headers={['Order', 'Buyer contact', 'Status', { label: 'Total', className: 'text-right' }]} label="Event orders" loading={ordersQuery.isLoading} loadingMessage="Loading orders…" error={ordersQuery.isError ? ordersQuery.error.message : null} emptyMessage="No orders for this event yet." pagination={{ pageIndex: ordersPage, pageSize: orderPageSize, totalItems: ordersQuery.data?.total ?? 0, onPageChange: setOrdersPage, onPageSizeChange: (size) => { setOrderPageSize(size); setOrdersPage(0) } }} renderRow={(order) => <OrderRow key={order.id} order={order} />} containerClassName="" /></CardContent></Card></TabsContent>
+        <TabsContent value="venue"><Card><CardContent className="pt-6">{venueQuery.isLoading ? <p className="text-sm text-ink-muted">Loading venue…</p> : venueQuery.isError ? <ErrorMessage>{venueQuery.error.message}</ErrorMessage> : venueQuery.data ? <dl className="grid gap-4 sm:grid-cols-2"><div><dt className="text-xs text-ink-muted">Venue</dt><dd className="mt-1 text-sm">{venueQuery.data.name || 'Unnamed venue'}</dd></div><div><dt className="text-xs text-ink-muted">Status</dt><dd className="mt-1 text-sm">{venueQuery.data.status || 'Unknown'}</dd></div><div><dt className="text-xs text-ink-muted">Address</dt><dd className="mt-1 text-sm">{venueQuery.data.address || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">City / country</dt><dd className="mt-1 text-sm">{[venueQuery.data.city, venueQuery.data.country].filter(Boolean).join(', ') || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Capacity</dt><dd className="mt-1 text-sm">{venueQuery.data.capacity ?? 'Not provided'}</dd></div></dl> : <p className="text-sm text-ink-muted">No venue is assigned to this event.</p>}</CardContent></Card></TabsContent>
+        {(['coupons', 'fees', 'channels'] as const).map((section) => <TabsContent key={section} value={section}><Card><CardContent className="pt-6"><p className="font-medium">{section === 'coupons' ? 'Event coupons' : section === 'fees' ? 'Event fee overrides' : 'Event publishing channels'}</p><p className="mt-1 text-sm text-ink-muted">The admin API does not currently provide event-specific {section === 'coupons' ? 'coupon' : section === 'fees' ? 'fee override' : 'channel assignment'} endpoints, so this section cannot be managed yet.</p></CardContent></Card></TabsContent>)}
+      </Tabs>
     </div> : <p className="py-8 text-center text-sm text-ink-muted">No event details were returned.</p>}
-    <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter>
-  </DialogContent></Dialog>
+  </section>
 }
 
 function OrderRow({ order }: { order: AdminOrder }) {
@@ -234,27 +316,33 @@ function OrderRow({ order }: { order: AdminOrder }) {
 export function AdminEventsPage() {
   const { session } = useAuth()
   const client = useQueryClient()
+  const navigate = useNavigate()
   const [status, setStatus] = useState<EventStatusFilter>('')
   const [orgId, setOrgId] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [eventPageSize, setEventPageSize] = useState(10)
   const [createOpen, setCreateOpen] = useState(false)
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [editingEvent, setEditingEvent] = useState<AdminEvent | null>(null)
   const orgsQuery = useQuery({ queryKey: orgsKey, queryFn: () => listAdminOrganizations(session!.token), enabled: Boolean(session?.token) })
+  const venuesQuery = useQuery({ queryKey: venuesKey, queryFn: () => listVenueDirectory(session!.token), enabled: Boolean(session?.token) })
+  const categoriesQuery = useQuery({ queryKey: ['qk-admin-event-categories'], queryFn: () => listEventCategories(session!.token), enabled: Boolean(session?.token) })
+  const publish = useMutation({ mutationFn: (id: string) => publishAdminEvent(session!.token, id), onSuccess: async (_result, id) => { await Promise.all([client.invalidateQueries({ queryKey: eventsKey }), client.invalidateQueries({ queryKey: eventKey(id) })]); toast.success('Event published') }, onError: (error) => toast.error('Could not publish event', { description: error.message }) })
   const eventsQuery = useQuery({ queryKey: [...eventsKey, 'list', orgId, status], queryFn: () => listAdminEvents(session!.token, { ...(orgId ? { orgId } : {}), ...(status ? { status } : {}) }), enabled: Boolean(session?.token) })
   const events = eventsQuery.data?.events ?? []
   const filtered = useMemo(() => events.filter((event) => `${event.title ?? ''} ${event.id} ${event.orgId ?? ''} ${event.venueId ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())), [events, search])
   const pageCount = Math.max(1, Math.ceil(filtered.length / eventPageSize))
   const visible = filtered.slice(page * eventPageSize, (page + 1) * eventPageSize)
-  const organizations = orgsQuery.data?.organizations ?? []
+  const organizations = (orgsQuery.data?.organizations ?? []).filter((org) => org.type !== 'vendor')
+  const venues = venuesQuery.data?.venues ?? []
+  const categories = categoriesQuery.data?.categories ?? []
   return <section className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-xl font-semibold tracking-tight">Event management</h1><p className="mt-1 max-w-2xl text-sm text-ink-muted">Manage cross-organization event details, ticket types, publishing, and orders.</p></div><Button onClick={() => setCreateOpen(true)}>Create event</Button></div>
-    <div className="flex flex-wrap justify-end gap-3"><Input aria-label="Search events" placeholder="Search title, event or organization ID" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0) }} className="sm:w-64" /><label className="sr-only" htmlFor="event-status-filter">Filter events by status</label><select id="event-status-filter" value={status} onChange={(e) => { setStatus(e.target.value as EventStatusFilter); setPage(0) }} className="h-9 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand"><option value="">All statuses</option><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option></select><label className="sr-only" htmlFor="event-org-filter">Filter events by organization</label><select id="event-org-filter" value={orgId} onChange={(e) => { setOrgId(e.target.value); setPage(0) }} className="h-9 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand"><option value="">All organizations</option>{organizations.map((org) => <option key={org.id} value={org.id}>{org.name || org.id}</option>)}</select></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><FilterTabs label="Filter events by status" value={status} onValueChange={(value) => { setStatus(value as EventStatusFilter); setPage(0) }} options={[{ value: '', label: 'All' }, { value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'completed', label: 'Completed' }]} /><div className="flex flex-wrap gap-3"><Input aria-label="Search events" placeholder="Search events or organizations" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0) }} className="sm:w-64" /><label className="sr-only" htmlFor="event-org-filter">Filter events by organization</label><select id="event-org-filter" value={orgId} onChange={(e) => { setOrgId(e.target.value); setPage(0) }} className="h-9 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand"><option value="">All organizations</option>{organizations.map((org) => <option key={org.id} value={org.id}>{org.name || org.id}</option>)}</select></div></div>
     {orgsQuery.isError && <ErrorMessage>{orgsQuery.error.message}</ErrorMessage>}
-    <Card><CardContent className="p-0"><DataTable data={visible} headers={['Event', 'Organization', 'Starts', 'Status', { label: 'Details', className: 'text-right' }]} label="Admin events" loading={eventsQuery.isLoading} loadingMessage="Loading events…" error={eventsQuery.isError ? eventsQuery.error.message : null} emptyMessage={search ? `No events match “${search}”.` : <div><p className="text-sm font-medium">No events found</p><p className="mt-1 text-sm text-ink-muted">Create an event or adjust the organization and status filters.</p></div>} emptyClassName="h-32 text-center" pagination={{ pageIndex: page, pageSize: eventPageSize, totalItems: filtered.length, onPageChange: (next) => setPage(Math.min(next, pageCount - 1)), onPageSizeChange: (size) => { setEventPageSize(size); setPage(0) } }} renderRow={(event) => <TableRow key={event.id}><TableCell><span className="block font-medium">{event.title || 'Untitled event'}</span><span className="mt-0.5 block text-xs text-ink-muted">{event.id}</span></TableCell><TableCell>{organizations.find((org) => org.id === event.orgId)?.name || event.orgId || 'Organization unavailable'}</TableCell><TableCell>{displayDateTime(event.startsAt, event.timezone)}</TableCell><TableCell>{statusBadge(event.status)}</TableCell><TableCell className="text-right"><div className="flex justify-end"><AppIconAction label={`Manage ${event.title || 'event'}`} icon={<span aria-hidden="true">↗</span>} showLabel onClick={() => setSelectedEventId(event.id)} /></div></TableCell></TableRow>} containerClassName="" />
+    <Card><CardContent className="p-0"><DataTable data={visible} headers={['Event', 'Organization', 'Venue', 'Category', 'Starts', 'Status', { label: 'Actions', className: 'text-right' }]} label="Admin events" loading={eventsQuery.isLoading} loadingMessage="Loading events…" error={eventsQuery.isError ? eventsQuery.error.message : null} emptyMessage={search ? `No events match “${search}”.` : <div><p className="text-sm font-medium">No events found</p><p className="mt-1 text-sm text-ink-muted">Create an event or adjust the organization and status filters.</p></div>} emptyClassName="h-32 text-center" pagination={{ pageIndex: page, pageSize: eventPageSize, totalItems: filtered.length, onPageChange: (next) => setPage(Math.min(next, pageCount - 1)), onPageSizeChange: (size) => { setEventPageSize(size); setPage(0) } }} renderRow={(event) => <TableRow key={event.id}><TableCell><span className="block font-medium">{event.title || 'Untitled event'}</span><span className="mt-0.5 block text-xs text-ink-muted">{event.id}</span></TableCell><TableCell>{organizations.find((org) => org.id === event.orgId)?.name || event.orgId || 'Organization unavailable'}</TableCell><TableCell>{venues.find((venue) => venue.id === event.venueId)?.name || '—'}</TableCell><TableCell>{categories.find((category) => category.id === event.categoryId)?.name || '—'}</TableCell><TableCell>{displayDateTime(event.startsAt, event.timezone)}</TableCell><TableCell>{statusBadge(event.status)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label={`View ${event.title || 'event'}`} icon={<span aria-hidden="true">↗</span>} onClick={() => navigate({ to: '/app/events/$eventId', params: { eventId: event.id } })} /><AppIconAction label={`Edit ${event.title || 'event'}`} icon={<span aria-hidden="true">✎</span>} onClick={() => setEditingEvent(event)} />{event.status === 'draft' && <AppIconAction label={`Publish ${event.title || 'event'}`} icon={<span aria-hidden="true">↑</span>} disabled={publish.isPending} onClick={() => publish.mutate(event.id)} />}</div></TableCell></TableRow>} containerClassName="" />
     </CardContent></Card>
-    <Sheet open={createOpen} onOpenChange={setCreateOpen}><SheetContent className="w-full overflow-y-auto sm:max-w-2xl"><SheetHeader><SheetTitle>Create event</SheetTitle><SheetDescription>New events start as drafts. Add ticket types and publish them from the event workspace.</SheetDescription></SheetHeader><EventForm inSheet organizations={organizations} onClose={() => setCreateOpen(false)} onSaved={(event) => { setCreateOpen(false); setSelectedEventId(event.id); client.invalidateQueries({ queryKey: eventsKey }) }} /></SheetContent></Sheet>
-    <EventDetails key={selectedEventId || 'no-event'} eventId={selectedEventId} onClose={() => setSelectedEventId(null)} onEventChanged={() => client.invalidateQueries({ queryKey: eventsKey })} />
+    <Sheet open={createOpen} onOpenChange={setCreateOpen}><SheetContent className="w-full overflow-y-auto sm:max-w-6xl"><SheetHeader><SheetTitle>Create event</SheetTitle><SheetDescription>New events start as drafts. Add ticket types and publish them from the event workspace.</SheetDescription></SheetHeader><EventForm organizations={organizations} venues={venues} categories={categories} onClose={() => setCreateOpen(false)} onSaved={() => setCreateOpen(false)} /></SheetContent></Sheet>
+    <Sheet open={Boolean(editingEvent)} onOpenChange={(open) => { if (!open) setEditingEvent(null) }}><SheetContent className="w-full overflow-y-auto sm:max-w-4xl"><SheetHeader><SheetTitle>Edit event</SheetTitle><SheetDescription>Update this event's details and schedule.</SheetDescription></SheetHeader>{editingEvent && <EventForm event={editingEvent} organizations={organizations} venues={venues} categories={categories} onClose={() => setEditingEvent(null)} onSaved={() => setEditingEvent(null)} />}</SheetContent></Sheet>
   </section>
 }

@@ -1330,6 +1330,30 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{orgId}/events/recurring:
+    post:
+      tags: [Events]
+      operationId: HandleAdminCreateRecurringEvents
+      summary: Create a recurring event series for an organization
+      description: Requires `admin.events.manage`. Creates draft events using the organization's event settings and the supplied recurrence rule.
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminCreateRecurringEventsRequest" }
+      responses:
+        "200":
+          description: Created parent event and occurrences.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminCreateRecurringEventsResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/events/{eventId}:
     get:
       tags: [Events]
@@ -1861,39 +1885,6 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
-  /api/admin/payouts:
-    get:
-      tags: [Payouts]
-      operationId: HandleAdminListPayouts
-      summary: List payouts across organizations
-      description: Requires an admin session. Supports offset pagination and an optional status filter.
-      parameters:
-        - name: limit
-          in: query
-          schema: { type: integer, default: 50, minimum: 1, maximum: 100 }
-        - name: offset
-          in: query
-          schema: { type: integer, default: 0, minimum: 0 }
-        - name: status
-          in: query
-          schema: { type: string }
-          description: Optional payout status filter.
-      responses:
-        "200":
-          description: A page of payouts and the total number matching the filter.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  payouts:
-                    type: array
-                    items: { $ref: "#/components/schemas/Payout" }
-                  total: { type: integer, format: int64 }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/payouts/{id}:
     get:
       tags: [Payouts]
@@ -1913,38 +1904,50 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
 
+  /api/admin/payouts:
+    get:
+      tags: [Payouts]
+      operationId: HandleAdminListPayouts
+      summary: List payouts across organizations
+      description: Requires an admin session. Results are ordered by payout ID and support optional status filtering with offset pagination.
+      parameters:
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+        - { in: query, name: status, schema: { type: string, enum: [pending, processing, paid, failed, cancelled] } }
+      responses:
+        "200":
+          description: Payout page and total count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payouts: { type: array, items: { $ref: "#/components/schemas/Payout" } }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
   # ---------------------------------------------------------------- Vendors & Venues
   /api/admin/vendors:
     get:
       tags: [Vendors & Venues]
       operationId: HandleAdminListVendors
       summary: List vendor profiles
-      description: Requires `admin.users.read`. Returns vendor profiles, newest first.
+      description: Requires `admin.users.read`. Returns profiles across all statuses, ordered by business name with offset pagination.
       parameters:
-        - name: status
-          in: query
-          schema: { type: string }
-          description: Optional profile status filter.
-        - name: limit
-          in: query
-          schema: { type: integer, default: 100, maximum: 100 }
-        - name: offset
-          in: query
-          schema: { type: integer, default: 0, minimum: 0 }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
         "200":
-          description: Vendors matching the filter.
+          description: Vendor page and total count.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  vendors:
-                    type: array
-                    items: { $ref: "#/components/schemas/Vendor" }
-                  total: { type: integer, format: int64 }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+                  vendors: { type: array, items: { $ref: "#/components/schemas/Vendor" } }
+                  total: { type: integer }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
     post:
@@ -1986,14 +1989,13 @@ paths:
       summary: Get a vendor profile
       description: Requires `admin.users.read`.
       parameters:
-        - { $ref: "#/components/parameters/PathId" }
+        - { in: path, name: id, required: true, schema: { type: string } }
       responses:
         "200":
           description: Vendor profile.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Vendor" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
@@ -2096,32 +2098,20 @@ paths:
       tags: [Vendors & Venues]
       operationId: HandleAdminListVenues
       summary: List venue profiles
-      description: Requires `admin.users.read`. Returns venue profiles, newest first.
+      description: Requires `admin.users.read`. Returns claimed and unclaimed venues across all statuses, ordered by name with offset pagination.
       parameters:
-        - name: status
-          in: query
-          schema: { type: string }
-          description: Optional profile status filter.
-        - name: limit
-          in: query
-          schema: { type: integer, default: 100, maximum: 100 }
-        - name: offset
-          in: query
-          schema: { type: integer, default: 0, minimum: 0 }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
         "200":
-          description: Venues matching the filter.
+          description: Venue page and total count.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  venues:
-                    type: array
-                    items: { $ref: "#/components/schemas/VenueDirectoryEntry" }
-                  total: { type: integer, format: int64 }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+                  venues: { type: array, items: { $ref: "#/components/schemas/Venue" } }
+                  total: { type: integer }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
     post:
@@ -2161,14 +2151,13 @@ paths:
       summary: Get a venue profile
       description: Requires `admin.users.read`.
       parameters:
-        - { $ref: "#/components/parameters/PathId" }
+        - { in: path, name: id, required: true, schema: { type: string } }
       responses:
         "200":
           description: Venue profile.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Venue" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
@@ -3826,6 +3815,52 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    AdminCreateRecurringEventsRequest:
+      type: object
+      required: [title, startsAt, endsAt]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        venueId: { type: string }
+        startsAt: { type: integer, format: int64, description: Unix seconds. }
+        endsAt: { type: integer, format: int64, description: Unix seconds. }
+        currency: { type: string, description: Empty defaults to GHS. }
+        recurrence:
+          type: object
+          properties:
+            frequency: { type: string, enum: [daily, weekly, monthly], description: Legacy recurrence. }
+            interval: { type: integer, description: Legacy interval; at least 1. }
+            count: { type: integer, description: Legacy occurrence count; 1 to 52. }
+            pattern: { type: string, enum: [daily, weekly, monthly, quarterly, yearly, custom] }
+            rule: { type: string, description: RFC 5545 subset using FREQ, INTERVAL, BYDAY, BYMONTHDAY, BYMONTH, COUNT, and UNTIL. }
+        categoryId: { type: integer, format: int32 }
+        attendanceType: { type: string, enum: [in_person, virtual, hybrid] }
+        countryCode: { type: string }
+        subdivisionCode: { type: string }
+        timezone: { type: string, description: IANA zone used to evaluate the recurrence rule. }
+        tags: { type: array, items: { type: string } }
+        variantRule: { type: string, enum: [manual, publish_N_days_before, publish_on_sellout] }
+        publishLeadDays: { type: integer, format: int32 }
+        ticketTemplates:
+          type: array
+          items:
+            type: object
+            required: [name, priceMinor, total]
+            properties:
+              name: { type: string }
+              priceMinor: { type: integer, format: int64 }
+              total: { type: integer, format: int64 }
+              saleStartOffsetSeconds: { type: integer, format: int64 }
+              saleEndOffsetSeconds: { type: integer, format: int64 }
+              admissionsPerUnit: { type: integer, format: int64 }
+    AdminCreateRecurringEventsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AdminEvent" }
+          description: Parent event first, followed by its occurrences.
+        seriesId: { type: string }
     AdminEvent:
       type: object
       properties:
@@ -3846,6 +3881,11 @@ components:
         timezone: { type: string }
         customSlug: { type: string }
         tags: { type: array, items: { type: string } }
+        seriesId: { type: string, description: 'Recurring-series membership; empty when the event is not part of a series.' }
+        parentEventId: { type: string }
+        occurrenceKey: { type: string, description: 'Original local start, for example 2026-11-02T18:00:00.' }
+        recurrencePattern: { type: string }
+        recurrenceRule: { type: string }
         createdAt: { type: integer, format: int64, description: Unix seconds. }
         updatedAt: { type: integer, format: int64, description: Unix seconds. }
     AdminTicketType:

@@ -14,6 +14,8 @@ export interface AdminEvent {
   currency?: string | null
   status?: 'draft' | 'published' | 'cancelled' | 'completed' | string | null
   visibility?: 'public' | 'private' | string | null
+  isRecurring?: boolean | null
+  recurrenceRule?: string | null
   categoryId?: number | null
   attendanceType?: string | null
   countryCode?: string | null
@@ -57,6 +59,8 @@ export interface AdminEventInput {
   venueId?: string
   startsAt: number
   endsAt: number
+  currency?: string
+  visibility?: 'public' | 'private'
   categoryId?: number
   attendanceType?: string
   countryCode?: string
@@ -64,6 +68,30 @@ export interface AdminEventInput {
   timezone?: string
   customSlug?: string
   tags?: string[]
+}
+
+export interface AdminRecurringEventsInput extends Omit<AdminEventInput, 'visibility' | 'customSlug'> {
+  recurrence: {
+    pattern?: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'
+    interval?: number
+    count?: number
+    rule?: string
+  }
+  variantRule?: 'manual' | 'publish_N_days_before' | 'publish_on_sellout'
+  publishLeadDays?: number
+  ticketTemplates?: Array<{
+    name: string
+    priceMinor: number
+    total: number
+    saleStartOffsetSeconds?: number
+    saleEndOffsetSeconds?: number
+    admissionsPerUnit?: number
+  }>
+}
+
+export interface AdminRecurringEventsResponse {
+  events?: Array<AdminEvent | null> | null
+  seriesId?: string | null
 }
 
 export interface AdminTicketTypeInput {
@@ -170,6 +198,10 @@ export function getAdminEvent(token: string, eventId: string) {
 
 export function createAdminEvent(token: string, orgId: string, input: AdminEventInput) {
   return request<AdminEvent>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/events`, { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function createAdminRecurringEvents(token: string, orgId: string, input: AdminRecurringEventsInput) {
+  return request<AdminRecurringEventsResponse>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/events/recurring`, { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function updateAdminEvent(token: string, eventId: string, input: AdminEventInput) {

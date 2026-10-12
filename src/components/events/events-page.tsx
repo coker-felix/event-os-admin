@@ -1,7 +1,11 @@
+import { useParams } from '@tanstack/react-router'
+import { AdminEventsPage, AdminEventDetailsPage } from './admin-events-page'
+
 export function EventsPage() {
-  return <section><h1 className="text-2xl font-semibold">Events</h1><p className="mt-2 text-sm text-ink-muted">Manage your events.</p></section>
+  return <AdminEventsPage />
 }
 
 export function EventDetailsPage() {
-  return <section><h1 className="text-2xl font-semibold">Event details</h1></section>
+  const { eventId } = useParams({ strict: false })
+  return <AdminEventDetailsPage eventId={eventId ?? ''} />
 }
