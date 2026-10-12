@@ -367,14 +367,8 @@ function DirectoryTable<T extends { id: string }>({
   );
   return (
     <Card>
-      <CardHeader className="border-b border-line sm:grid-cols-[1fr_auto] sm:items-center">
-        <div>
-          <CardTitle>{title}</CardTitle>
-          <p data-slot="card-description" className="text-sm text-ink-muted">
-            {description}
-          </p>
-        </div>
-        <Input
+      <CardContent className="p-0">
+        <div className="flex justify-end p-4"><Input
           aria-label={`Search ${label}`}
           placeholder={`Search ${label}`}
           value={search}
@@ -383,9 +377,7 @@ function DirectoryTable<T extends { id: string }>({
             setPageIndex(0);
           }}
           className="sm:w-64"
-        />
-      </CardHeader>
-      <CardContent className="p-0">
+        /></div>
         <DataTable
           data={visible}
           headers={columns.map((column, index) => ({
@@ -533,14 +525,6 @@ function OrganizationReconciliationQueue({
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
   return (
     <Card>
-      <CardHeader className="border-b border-line">
-        <div>
-          <CardTitle>{title}</CardTitle>
-          <p data-slot="card-description" className="text-sm text-ink-muted">
-            {description}
-          </p>
-        </div>
-      </CardHeader>
       <CardContent className="p-0">
         <DataTable
           data={visibleItems}
@@ -758,14 +742,6 @@ function VenueClaimsQueue() {
   );
   return (
     <Card>
-      <CardHeader className="border-b border-line">
-        <div>
-          <CardTitle>Venue claims</CardTitle>
-          <p data-slot="card-description" className="text-sm text-ink-muted">
-            Review ownership requests for venues in the directory.
-          </p>
-        </div>
-      </CardHeader>
       <CardContent className="p-0">
         <DataTable
           data={visibleClaims}
@@ -1729,14 +1705,8 @@ export function AccountsOrganizationsPage() {
         <Button onClick={() => setCreateOpen(true)}>Add organization</Button>
       </div>
       <Card>
-        <CardHeader className="border-b border-line sm:grid-cols-[1fr_auto] sm:items-center">
-          <div>
-            <CardTitle>Organization directory</CardTitle>
-            <p data-slot="card-description" className="text-sm text-ink-muted">
-              {organizations.length} organizations
-            </p>
-          </div>
-          <Input
+        <CardContent className="p-0">
+          <div className="flex justify-end p-4"><Input
             aria-label="Search organizations"
             placeholder="Search organization, owner, contact, or status"
             value={search}
@@ -1745,9 +1715,7 @@ export function AccountsOrganizationsPage() {
               setOrgPageIndex(0);
             }}
             className="sm:w-72"
-          />
-        </CardHeader>
-        <CardContent className="p-0">
+          /></div>
           <DataTable
             data={visibleOrganizations}
             headers={[
@@ -2168,11 +2136,8 @@ export function AccountsOrganizationUsersPage() {
         </p>
       </div>
       <Card>
-        <CardHeader>
-          <CardTitle>Organization member roster</CardTitle>
-          <p data-slot="card-description" className="text-sm text-ink-muted">
-            Select an organization to load its members.
-          </p>
+        <CardContent>
+          <div className="space-y-3">
           <label className="sr-only" htmlFor="member-org-select">
             Organization
           </label>
@@ -2206,8 +2171,7 @@ export function AccountsOrganizationUsersPage() {
               No organizations available.
             </p>
           )}
-        </CardHeader>
-        <CardContent>
+          </div>
           {organizationsQuery.isError && (
             <div className="mt-4">
               <ErrorMessage>{organizationsQuery.error.message}</ErrorMessage>

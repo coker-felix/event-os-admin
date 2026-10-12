@@ -70,17 +70,14 @@ export function FeatureFlagsPage() {
     </div>
 
     <Card>
-      <CardHeader className="border-b border-line sm:grid-cols-[1fr_auto] sm:items-center">
-        <div><CardTitle>Platform defaults</CardTitle><p data-slot="card-description" className="text-sm text-ink-muted">{flagsQuery.data?.flags.length ?? '—'} registered flags</p></div>
-        <input
+      <CardContent className="p-0">
+        <div className="flex justify-end p-4"><input
           aria-label="Search feature flags"
           placeholder="Search name or description"
           value={search}
           onChange={(event) => { setSearch(event.target.value); setPageIndex(0) }}
           className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30 sm:w-64"
-        />
-      </CardHeader>
-      <CardContent className="p-0">
+        /></div>
         <DataTable data={visibleFlags} headers={['Feature flag', 'Default state', { label: 'Global default', className: 'text-right' }]} label="Feature flag platform defaults" loading={flagsQuery.isLoading} loadingMessage="Loading feature flags…" error={flagsQuery.isError ? flagsQuery.error.message : null} emptyMessage={search ? 'No feature flags match your search.' : 'No feature flags are registered.'} pagination={{ pageIndex, pageSize, totalItems: filteredFlags.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(flag) => <FeatureFlagRow key={flag.name} flag={flag} />} containerClassName="" />
       </CardContent>
     </Card>

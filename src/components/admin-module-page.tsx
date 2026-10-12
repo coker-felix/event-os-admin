@@ -1,6 +1,8 @@
 import { Link, useLocation, useParams } from '@tanstack/react-router'
 import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, OrganizationDetailsPage } from '@/components/accounts-directory-pages'
 import { AdminEventsPage } from '@/components/admin-events-page'
+import { ContractsPage } from '@/components/contracts-page'
+import { InvoicesPage } from '@/components/invoices-page'
 import { TicketVerificationPage } from '@/components/events-ticketing-pages'
 import { PlatformCountriesPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform-admin-pages'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -119,6 +121,8 @@ export function AdminModulePage() {
   if (module === 'accounts' && section === 'vendors') return <AccountsVendorsPage />
   if (module === 'events' && section === 'directory') return <AdminEventsPage />
   if (module === 'ticketing' && section === 'verify') return <TicketVerificationPage />
+  if ((module === 'documents' || module === 'contracts') && section === 'contracts') return <ContractsPage />
+  if (module === 'invoices' && section === 'list') return <InvoicesPage />
   if (module === 'platform' && section === 'settings') return <PlatformSettingsPage />
   if (module === 'platform' && section === 'countries') return <PlatformCountriesPage />
   if (module === 'platform' && section === 'subdivisions') return <PlatformSubdivisionsPage />
