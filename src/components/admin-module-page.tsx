@@ -3,6 +3,7 @@ import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendo
 import { AdminEventsPage } from '@/components/events/admin-events-page'
 import { ContractsPage } from '@/components/contracts/contracts-page'
 import { InvoicesPage } from '@/components/invoices/invoices-page'
+import { CommerceFeeRulesPage, CommercePayoutsPage, CommerceSettingsPage, CommerceTaxExemptionsPage, CommerceTaxRulesPage } from '@/components/commerce/commerce-admin-pages'
 import { TicketVerificationPage } from '@/components/events/events-ticketing-pages'
 import { PlatformCountriesPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform/platform-admin-pages'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -133,6 +134,11 @@ export function AdminModulePage() {
   if (module === 'platform' && section === 'distribution-channels') return <PlatformDistributionChannelsPage />
   if (module === 'platform' && section === 'event-categories') return <PlatformEventCategoriesPage />
   if (module === 'platform' && section === 'sponsors') return <PlatformSponsorsPage />
+  if (module === 'commerce' && section === 'taxes') return <CommerceTaxRulesPage />
+  if (module === 'commerce' && section === 'fees') return <CommerceFeeRulesPage />
+  if (module === 'commerce' && section === 'commerce') return <CommerceSettingsPage />
+  if (module === 'commerce' && section === 'exemptions') return <CommerceTaxExemptionsPage />
+  if (module === 'commerce' && section === 'payouts') return <CommercePayoutsPage />
   if (section === 'overview' || (module === 'marketplace' && !section)) {
     const links = overviewResources[module ?? ''] ?? []
     return <section className="space-y-6">

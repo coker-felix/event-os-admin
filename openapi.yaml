@@ -1861,6 +1861,39 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/payouts:
+    get:
+      tags: [Payouts]
+      operationId: HandleAdminListPayouts
+      summary: List payouts across organizations
+      description: Requires an admin session. Supports offset pagination and an optional status filter.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+        - name: status
+          in: query
+          schema: { type: string }
+          description: Optional payout status filter.
+      responses:
+        "200":
+          description: A page of payouts and the total number matching the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payouts:
+                    type: array
+                    items: { $ref: "#/components/schemas/Payout" }
+                  total: { type: integer, format: int64 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/payouts/{id}:
     get:
       tags: [Payouts]
@@ -1882,6 +1915,38 @@ paths:
 
   # ---------------------------------------------------------------- Vendors & Venues
   /api/admin/vendors:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminListVendors
+      summary: List vendor profiles
+      description: Requires `admin.users.read`. Returns vendor profiles, newest first.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+          description: Optional profile status filter.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        "200":
+          description: Vendors matching the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendors:
+                    type: array
+                    items: { $ref: "#/components/schemas/Vendor" }
+                  total: { type: integer, format: int64 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
     post:
       tags: [Vendors & Venues]
       operationId: HandleAdminCreateVendor
@@ -1913,6 +1978,24 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendors/{id}:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminGetVendor
+      summary: Get a vendor profile
+      description: Requires `admin.users.read`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Vendor profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/vendors/{id}/status:
     patch:
@@ -2009,6 +2092,38 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/venues:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminListVenues
+      summary: List venue profiles
+      description: Requires `admin.users.read`. Returns venue profiles, newest first.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+          description: Optional profile status filter.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        "200":
+          description: Venues matching the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  venues:
+                    type: array
+                    items: { $ref: "#/components/schemas/VenueDirectoryEntry" }
+                  total: { type: integer, format: int64 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
     post:
       tags: [Vendors & Venues]
       operationId: HandleAdminCreateDirectoryVenue
@@ -2038,6 +2153,24 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/venues/{id}:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminGetVenue
+      summary: Get a venue profile
+      description: Requires `admin.users.read`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Venue profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Venue" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/venues/{id}/ownership-history:
     get:

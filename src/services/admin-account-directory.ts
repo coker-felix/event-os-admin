@@ -2,17 +2,37 @@ import { adminApiBaseUrl, authenticatedAdminFetch } from './admin-auth'
 
 export interface VendorDirectoryEntry {
   id: string
+  accountId?: string | null
   businessName?: string | null
+  contactName?: string | null
+  email?: string | null
+  phone?: string | null
+  status?: string | null
   tier?: 'normal' | 'verified' | 'partnered' | null
+  category?: string | null
+  city?: string | null
+  country?: string | null
+  description?: string | null
+  heldPayoutAmount?: number | null
+  onboardingIncomplete?: boolean | null
 }
 
 export interface VenueDirectoryEntry {
   id: string
+  ownerAccountId?: string | null
   name?: string | null
+  address?: string | null
   city?: string | null
   country?: string | null
   capacity?: number | null
+  status?: string | null
+  category?: string | null
+  description?: string | null
+  amenities?: Array<string | null> | null
   claimed?: boolean | null
+  createdVia?: string | null
+  createdByAccountId?: string | null
+  createdByOrgId?: string | null
 }
 
 export interface OrganizationCommerceProfile {
@@ -111,7 +131,7 @@ export async function listVendorDirectory(token: string) {
   let offset = 0
   let total: number | undefined
   do {
-    const response = await request<{ vendors?: Array<VendorDirectoryEntry | null> | null; total?: number | null }>(token, `/api/v1/vendors?limit=100&offset=${offset}`)
+    const response = await request<{ vendors?: Array<VendorDirectoryEntry | null> | null; total?: number | null }>(token, `/api/admin/vendors?status=active&limit=100&offset=${offset}`)
     const page = normalizeRows(response?.vendors)
     vendors.push(...page)
     total = typeof response?.total === 'number' ? response.total : undefined
@@ -126,7 +146,7 @@ export async function listVenueDirectory(token: string) {
   let offset = 0
   let total: number | undefined
   do {
-    const response = await request<{ venues?: Array<VenueDirectoryEntry | null> | null; total?: number | null }>(token, `/api/v1/venues?limit=100&offset=${offset}`)
+    const response = await request<{ venues?: Array<VenueDirectoryEntry | null> | null; total?: number | null }>(token, `/api/admin/venues?status=active&limit=100&offset=${offset}`)
     const page = normalizeRows(response?.venues)
     venues.push(...page)
     total = typeof response?.total === 'number' ? response.total : undefined
@@ -134,6 +154,14 @@ export async function listVenueDirectory(token: string) {
     offset += page.length
   } while (offset < total)
   return { venues }
+}
+
+export function getAdminVendor(token: string, id: string) {
+  return request<VendorDirectoryEntry>(token, `/api/admin/vendors/${encodeURIComponent(id)}`)
+}
+
+export function getAdminVenue(token: string, id: string) {
+  return request<VenueDirectoryEntry>(token, `/api/admin/venues/${encodeURIComponent(id)}`)
 }
 
 export function updateVendorTier(token: string, id: string, tier: NonNullable<VendorDirectoryEntry['tier']>) {
