@@ -1,7 +1,8 @@
-import { Link, useParams } from '@tanstack/react-router'
+import { Link, useLocation, useParams } from '@tanstack/react-router'
 import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, OrganizationDetailsPage } from '@/components/accounts-directory-pages'
 import { AdminEventsPage } from '@/components/admin-events-page'
 import { TicketVerificationPage } from '@/components/events-ticketing-pages'
+import { PlatformCountriesPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform-admin-pages'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const moduleLabels: Record<string, string> = {
@@ -106,7 +107,11 @@ const overviewResources: Record<string, Array<{ label: string; section: string }
 }
 
 export function AdminModulePage() {
-  const { module, section } = useParams({ strict: false })
+  const params = useParams({ strict: false })
+  const { pathname } = useLocation()
+  const pathParts = pathname.split('/').filter(Boolean)
+  const module = params.module ?? pathParts[1]
+  const section = params.section ?? pathParts[2]
   if (module === 'organizations' && section) return <OrganizationDetailsPage organizationId={section} />
   if (module === 'accounts' && section === 'organizations') return <AccountsOrganizationsPage />
   if (module === 'accounts' && section === 'org-users') return <AccountsOrganizationUsersPage />
@@ -114,6 +119,12 @@ export function AdminModulePage() {
   if (module === 'accounts' && section === 'vendors') return <AccountsVendorsPage />
   if (module === 'events' && section === 'directory') return <AdminEventsPage />
   if (module === 'ticketing' && section === 'verify') return <TicketVerificationPage />
+  if (module === 'platform' && section === 'settings') return <PlatformSettingsPage />
+  if (module === 'platform' && section === 'countries') return <PlatformCountriesPage />
+  if (module === 'platform' && section === 'subdivisions') return <PlatformSubdivisionsPage />
+  if (module === 'platform' && section === 'distribution-channels') return <PlatformDistributionChannelsPage />
+  if (module === 'platform' && section === 'event-categories') return <PlatformEventCategoriesPage />
+  if (module === 'platform' && section === 'sponsors') return <PlatformSponsorsPage />
   if (section === 'overview') {
     const links = overviewResources[module ?? ''] ?? []
     return <section className="space-y-6">
