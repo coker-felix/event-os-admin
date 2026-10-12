@@ -265,7 +265,7 @@ export function RootLayout() {
           </button>
           {!collapsed && <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface-muted p-3">
             <Avatar size="sm"><AvatarFallback className="bg-brand-soft text-xs font-semibold text-brand">AD</AvatarFallback></Avatar>
-            <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">Administrator</p><p className="truncate text-[11px] text-ink-muted">Admin access</p></div>
+            <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold"></p><p className="truncate text-[11px] text-ink-muted">Admin access</p></div>
           </div>}
         </div>
       </aside>
@@ -299,7 +299,7 @@ export function RootLayout() {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <main className="mx-auto max-w-[1440px] px-8 py-8"><Outlet /></main>
+        <main className="mx-auto max-w-360 px-8 py-8 bg-[#edf1f5]"><Outlet /></main>
       </div>
     </div>
   )
