@@ -66,8 +66,8 @@ export function LoginPage() {
         <svg className="login-africa" viewBox="0 0 430 540" role="img" aria-label="Map silhouette of Africa">
           <defs>
             <pattern id="africa-lines" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-              <rect width="8" height="8" fill="#ff5a1f" />
-              <path d="M0 0V8" stroke="#ffd0b7" strokeOpacity=".72" strokeWidth="2" />
+              <rect width="8" height="8" fill="#0f766e" />
+              <path d="M0 0V8" stroke="#99f6e4" strokeOpacity=".72" strokeWidth="2" />
             </pattern>
           </defs>
           <path fill="url(#africa-lines)" d="M83 25 137 15 174 27 211 22 243 41 271 47 292 66 326 77 342 103 365 111 360 137 379 154 367 177 376 201 355 219 359 243 339 260 344 285 327 300 320 329 302 347 294 373 277 390 266 420 249 446 235 480 218 514 204 494 193 461 177 438 159 417 151 391 141 371 129 346 115 324 102 299 94 273 79 250 74 222 59 201 65 176 50 152 61 127 55 105 69 85 65 63 78 47Z" />
