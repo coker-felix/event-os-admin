@@ -27,6 +27,7 @@ import {
   MagnifyingGlass,
   MapPin,
   MapTrifold,
+  Moon,
   Percent,
   Question,
   QrCode,
@@ -41,6 +42,7 @@ import {
   SquaresFour,
   Stack,
   Storefront,
+  Sun,
   Tag,
   TextAlignLeft,
   Ticket,
@@ -201,13 +203,28 @@ export function RootLayout() {
   const collapsed = useSidebarStore((state) => state.collapsed)
   const toggle = useSidebarStore((state) => state.toggle)
   const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    try {
+      return window.localStorage.getItem('event-os-admin-theme') === 'dark'
+    } catch {
+      return false
+    }
+  })
   useEffect(() => {
     if (!session) void navigate({ to: '/signin', search: { redirect: pathname || '/app' } as never })
   }, [navigate, pathname, session])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('event-os-admin-theme', isDarkMode ? 'dark' : 'light')
+    } catch {
+      // The dashboard remains usable when browser storage is unavailable.
+    }
+  }, [isDarkMode])
+
   return (
-    <div className="min-h-screen  bg-[#edf1f5]">
+    <div className={`min-h-screen bg-canvas ${isDarkMode ? 'dark' : ''}`}>
       <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-line bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
         <div className="flex h-14 items-center gap-3 border-b border-line px-5">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-sm font-bold text-white shadow-card">E</span>
@@ -283,6 +300,16 @@ export function RootLayout() {
             <Bell size={16} aria-hidden="true" />
             <span aria-hidden="true" className="absolute right-2 top-2 size-1.5 rounded-full bg-danger" />
           </button>
+          <button
+            type="button"
+            aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-pressed={isDarkMode}
+            title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            onClick={() => setIsDarkMode((current) => !current)}
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-muted text-ink-muted transition-colors hover:text-ink"
+          >
+            {isDarkMode ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+          </button>
           <DropdownMenu>
             <DropdownMenuTrigger className="flex shrink-0 items-center gap-3 rounded-full px-1.5 py-1 outline-none hover:bg-surface-muted">
               <Avatar><AvatarFallback className="bg-brand-soft text-xs font-semibold text-brand">AD</AvatarFallback></Avatar>
@@ -299,7 +326,7 @@ export function RootLayout() {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <main className="mx-auto max-w-360 px-8 py-8 bg-[#edf1f5]"><Outlet /></main>
+        <main className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-360 bg-canvas px-8 py-8"><Outlet /></main>
       </div>
     </div>
   )
