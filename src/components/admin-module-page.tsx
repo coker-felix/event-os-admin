@@ -7,6 +7,7 @@ import { CommerceFeeRulesPage, CommercePayoutsPage, CommerceSettingsPage, Commer
 import { TicketVerificationPage } from '@/components/events/events-ticketing-pages'
 import { PlatformCountriesPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform/platform-admin-pages'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ModuleAnalyticsOverview } from '@/components/module-analytics-overview'
 
 const moduleLabels: Record<string, string> = {
   accounts: 'Accounts',
@@ -139,8 +140,13 @@ export function AdminModulePage() {
   if (module === 'commerce' && section === 'commerce') return <CommerceSettingsPage />
   if (module === 'commerce' && section === 'exemptions') return <CommerceTaxExemptionsPage />
   if (module === 'commerce' && section === 'payouts') return <CommercePayoutsPage />
-  if (section === 'overview' || (module === 'marketplace' && !section)) {
-    const links = overviewResources[module ?? ''] ?? []
+  const analyticsModule = module === 'documents' ? 'contracts' : module
+  const analyticsModules = ['accounts', 'events', 'ticketing', 'commerce', 'marketplace', 'contracts', 'invoices', 'staff', 'platform']
+  const links = overviewResources[module ?? ''] ?? []
+  if (section === 'overview' || (!section && analyticsModules.includes(analyticsModule ?? ''))) {
+    if (analyticsModule && analyticsModules.includes(analyticsModule)) {
+      return <ModuleAnalyticsOverview module={analyticsModule as 'accounts' | 'events' | 'ticketing' | 'commerce' | 'marketplace' | 'contracts' | 'invoices' | 'staff' | 'platform'} title={moduleLabels[module ?? ''] ?? module ?? 'Module'} links={links} />
+    }
     return <section className="space-y-6">
       <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">{moduleLabels[module ?? ''] ?? module}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1><p className="mt-2 max-w-2xl text-sm text-ink-muted">Choose an area to manage in {moduleLabels[module ?? '']?.toLowerCase() ?? 'this module'}.</p></div>
       <Card><CardHeader><CardTitle>{moduleLabels[module ?? ''] ?? module} pages</CardTitle></CardHeader><CardContent><ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{links.map((item) => {
