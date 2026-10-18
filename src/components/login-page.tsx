@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
+import { Eye, EyeSlash } from '@phosphor-icons/react'
 import { useAuth } from '../contexts/auth'
 
 export function LoginPage() {
@@ -10,6 +11,7 @@ export function LoginPage() {
   })
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -47,7 +49,19 @@ export function LoginPage() {
             </div>
             <div className="login-field">
               <label htmlFor="password">Password</label>
-              <input id="password" name="password" type="password" autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmitting} />
+              <div className="login-password-control">
+                <input id="password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmitting} />
+                <button
+                  type="button"
+                  className="login-password-toggle"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  disabled={isSubmitting}
+                >
+                  {showPassword ? <EyeSlash size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+                </button>
+              </div>
             </div>
             {error && <p role="alert" className="login-error">{error}</p>}
             <button type="submit" disabled={isSubmitting} className="login-submit">
