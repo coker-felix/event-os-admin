@@ -4,10 +4,10 @@ import { useAuth } from '@/contexts/auth'
 import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { formatDate } from '@/lib/date-format'
+import { listAdminOrganizations } from '@/services/admin-account-directory'
 import { getAdminContract, listAdminContracts, type AdminContract } from '@/services/admin-documents'
 
 const PAGE_SIZE = 25
@@ -27,6 +27,12 @@ export function ContractsPage() {
   const [organizationId, setOrganizationId] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [pageTokens, setPageTokens] = useState<string[]>([''])
+  const organizationsQuery = useQuery({
+    queryKey: ['qk-admin-organizations'],
+    queryFn: () => listAdminOrganizations(session!.token),
+    enabled: Boolean(session?.token),
+  })
+  const organizations = (organizationsQuery.data?.organizations ?? []).filter((organization) => Boolean(organization?.id))
   const pageToken = pageTokens[pageIndex] || ''
   const query = useQuery({
     queryKey: [...contractKey, pageIndex, pageToken, organizationId],
@@ -48,7 +54,7 @@ export function ContractsPage() {
 
   return <section className="space-y-6">
     <div><h1 className="text-xl font-semibold tracking-tight">Contracts</h1><p className="mt-1 max-w-2xl text-sm text-ink-muted">Review contract status and open the full agreement record.</p></div>
-    <div className="flex justify-end"><label className="flex items-center gap-2 text-xs font-medium text-ink-muted">Organization ID<Input value={organizationId} onChange={(event) => updateOrganization(event.target.value)} placeholder="Filter by organization" className="w-56" /></label></div><Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={contracts} headers={['Contract', 'Relationship', 'Organization', 'Status', 'Created', 'Executed']} label="Contracts" loading={query.isLoading} loadingMessage="Loading contracts…" error={query.isError ? query.error.message : null} emptyMessage={organizationId ? 'No contracts match this organization.' : 'No contracts found.'} pagination={false} renderRow={(contract) => <TableRow key={contract.id || `${contract.operationId}-${contract.createdAt}`} className="cursor-pointer" onClick={() => contract.id && setSelectedId(contract.id)}>
+    <div className="flex justify-end"><label className="flex items-center gap-2 text-xs font-medium text-ink-muted">Organization<select aria-label="Filter contracts by organization" value={organizationId} onChange={(event) => updateOrganization(event.target.value)} disabled={organizationsQuery.isLoading || organizationsQuery.isError || organizations.length === 0} className="h-9 w-56 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"><option value="">{organizationsQuery.isLoading ? 'Loading organizations…' : organizationsQuery.isError ? 'Organizations unavailable' : organizations.length ? 'All organizations' : 'No organizations available'}</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name || organization.slug || organization.id}</option>)}</select></label>{organizationsQuery.isError && <p role="alert" className="ml-3 self-center text-xs text-danger">Could not load organizations: {organizationsQuery.error.message}</p>}</div><Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={contracts} headers={['Contract', 'Relationship', 'Organization', 'Status', 'Created', 'Executed']} label="Contracts" loading={query.isLoading} loadingMessage="Loading contracts…" error={query.isError ? query.error.message : null} emptyMessage={organizationId ? 'No contracts match this organization.' : 'No contracts found.'} pagination={false} renderRow={(contract) => <TableRow key={contract.id || `${contract.operationId}-${contract.createdAt}`} className="cursor-pointer" onClick={() => contract.id && setSelectedId(contract.id)}>
         <TableCell><span className="block font-medium">{display(contract.category || contract.relationship)} agreement</span><span className="mt-0.5 block max-w-56 truncate text-xs text-ink-muted">{display(contract.id)}</span></TableCell>
         <TableCell>{display(contract.relationship)}</TableCell><TableCell>{display(contract.parties?.filter(Boolean).map((party) => party?.organizationId).filter(Boolean).join(', '))}</TableCell>
         <TableCell><Badge className={statusClass(contract.status)}>{display(contract.status)}</Badge></TableCell><TableCell>{formatDate(contract.createdAt?.slice(0, 10))}</TableCell><TableCell>{formatDate(contract.executedAt?.slice(0, 10))}</TableCell>
