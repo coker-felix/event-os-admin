@@ -275,7 +275,7 @@ export function RootLayout() {
                 </button>
                 {!collapsed && <div className="space-y-0.5 py-1 pl-7">
                   {group.items.map((item) => {
-                    const active = (item.to === '/app/accounts/organizations' && organizationDetailActive) || (item.to === '/app/events' && eventDetailActive) || pathname === item.to || pathname.startsWith(`${item.to}/`)
+                    const active = (item.to === '/app/accounts/organizations' && organizationDetailActive) || (item.to === '/app/events' ? pathname === item.to || eventDetailActive : pathname === item.to || pathname.startsWith(`${item.to}/`))
                     const ItemIcon = itemIcons[item.to] ?? GroupIcon
                     return <Link key={item.to} to={item.to as never} aria-current={active ? 'page' : undefined} className={`flex min-h-8 items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${active ? 'bg-brand-soft font-medium text-brand dark:text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
                       <ItemIcon aria-hidden="true" size={16} weight="duotone" className="shrink-0" />
