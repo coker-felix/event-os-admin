@@ -22,7 +22,6 @@ import {
   GearSix,
   Globe,
   Handshake,
-  IdentificationBadge,
   IdentificationCard,
   LockKey,
   MagnifyingGlass,
@@ -75,7 +74,6 @@ const moduleIcons: Record<AdminNavigationModule['id'], Icon> = {
 const itemIcons: Record<string, Icon> = {
   '/app/accounts/users': User,
   '/app/accounts/organizations': Buildings,
-  '/app/accounts/org-users': IdentificationBadge,
   '/app/accounts/venues': MapPin,
   '/app/accounts/vendors': Storefront,
   '/app/accounts/kyc': Fingerprint,
@@ -121,7 +119,6 @@ const navigation: readonly AdminNavigationModule[] = [
       { label: 'Overview', to: '/app/accounts/overview' },
       { label: 'Users', to: '/app/accounts/users' },
       { label: 'Organizations', to: '/app/accounts/organizations' },
-      { label: 'Organization users', to: '/app/accounts/org-users' },
       { label: 'Venues', to: '/app/accounts/venues' },
       { label: 'Vendors', to: '/app/accounts/vendors' },
       { label: 'KYC review', to: '/app/accounts/kyc' },

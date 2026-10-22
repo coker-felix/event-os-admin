@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/popover";
 import { CaretDown, Check } from "@phosphor-icons/react";
 import { listAdminConsumers } from "@/services/admin-users";
+import { getAdminKycProfile, listAdminKycProfiles } from "@/services/admin-kyc";
 import { OrganizationFeatureFlagsCard } from "@/components/accounts/organization-feature-flags-card";
 import { formatDate } from "@/lib/date-format";
 import {
@@ -90,6 +91,19 @@ function ErrorMessage({ children }: { children: string }) {
       {children}
     </p>
   );
+}
+
+function OrganizationMemberStatus({ status }: { status?: string | null }) {
+  const normalized = (status || "unknown").trim().toLowerCase();
+  const label = normalized.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const className = normalized === "active"
+    ? "bg-success-soft text-success"
+    : normalized === "pending" || normalized === "pending_approval"
+      ? "bg-warning-soft text-warning"
+      : normalized === "suspended" || normalized === "inactive"
+        ? "bg-danger-soft text-danger"
+        : "";
+  return <Badge className={className} variant={className ? "default" : "outline"}>{label}</Badge>;
 }
 
 function Identity({ name, secondary }: { name: string; secondary?: string }) {
@@ -1905,6 +1919,7 @@ export function OrganizationDetailsPage({
 }: {
   organizationId: string;
 }) {
+  const [activeSection, setActiveSection] = useState("overview");
   const { session } = useAuth();
   const navigate = useNavigate();
   const organizationsQuery = useQuery({
@@ -1926,6 +1941,26 @@ export function OrganizationDetailsPage({
   const organization = (organizationsQuery.data?.organizations ?? []).find(
     (item) => item.id === organizationId,
   );
+  const membersQuery = useQuery({
+    queryKey: ["qk-admin-organization-members", organizationId],
+    queryFn: () => listOrganizationMembers(session!.token, organizationId),
+    enabled: Boolean(session?.token && organizationId && activeSection === "members"),
+  });
+  const kycProfilesQuery = useQuery({
+    queryKey: ["qk-admin-kyc-profiles"],
+    queryFn: () => listAdminKycProfiles(session!.token),
+    enabled: Boolean(session?.token && organization && activeSection === "documents"),
+  });
+  const kycProfile = (kycProfilesQuery.data?.profiles ?? []).find(
+    (profile) => profile.type === "organization" && profile.accountId === organizationId,
+  ) ?? (kycProfilesQuery.data?.profiles ?? []).find(
+    (profile) => profile.type === "organization" && Boolean(organization?.ownerId) && profile.accountId === organization?.ownerId,
+  );
+  const kycDocumentsQuery = useQuery({
+    queryKey: ["qk-admin-kyc-profile", kycProfile?.id],
+    queryFn: () => getAdminKycProfile(session!.token, kycProfile!.id),
+    enabled: Boolean(session?.token && kycProfile?.id && activeSection === "documents"),
+  });
   const owner = (ownersQuery.data?.users ?? []).find(
     (item) => item.id === organization?.ownerId,
   );
@@ -1976,8 +2011,45 @@ export function OrganizationDetailsPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="space-y-5">
           <Card>
+            <CardContent className="flex flex-wrap items-center gap-4 sm:gap-5">
+              <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-brand-soft text-lg font-semibold text-brand">
+                {(organization.name || "O").trim().slice(0, 1).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-lg font-semibold tracking-tight">{organization.name || "Unnamed organization"}</h2>
+                <p className="mt-1 break-all font-mono text-xs text-ink-muted">{organization.id}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <OrganizationTypeBadge type={organization.type} />
+                {organization.status === "active" ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{organization.status || "Unknown"}</Badge>}
+                {organization.kycStatus === "approved" ? <Badge className="bg-success-soft text-success">KYC approved</Badge> : organization.kycStatus === "pending" ? <Badge className="bg-warning-soft text-warning">KYC pending</Badge> : <Badge variant="outline">KYC {organization.kycStatus || "unknown"}</Badge>}
+              </div>
+            </CardContent>
+          </Card>
+          <div role="tablist" aria-label="Organization sections" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-surface-muted p-1" onKeyDown={(event) => {
+            const values = ["overview", "ownership", "members", "documents", "commerce", "features"];
+            const currentIndex = values.indexOf(activeSection);
+            const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? values.length - 1 : event.key === "ArrowRight" ? (currentIndex + 1) % values.length : event.key === "ArrowLeft" ? (currentIndex - 1 + values.length) % values.length : -1;
+            if (nextIndex >= 0) {
+              event.preventDefault();
+              const nextSection = values[nextIndex];
+              setActiveSection(nextSection);
+              document.getElementById(`organization-tab-${nextSection}`)?.focus();
+            }
+          }}>
+            {([
+              ["overview", "Overview"],
+              ["ownership", "Owner & contact"],
+              ["members", "Organization members"],
+              ["documents", "KYC documents"],
+              ["commerce", "Commerce & tax"],
+              ["features", "Feature flags"],
+            ] as const).map(([value, label]) => <button key={value} id={`organization-tab-${value}`} type="button" role="tab" tabIndex={activeSection === value ? 0 : -1} aria-selected={activeSection === value} aria-controls="organization-section-panel" onClick={() => setActiveSection(value)} className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-brand ${activeSection === value ? "bg-surface text-brand shadow-sm" : "text-ink-muted hover:bg-surface hover:text-ink"}`}>{label}</button>)}
+          </div>
+          <div id="organization-section-panel" role="tabpanel" aria-labelledby={`organization-tab-${activeSection}`} tabIndex={0} className="outline-none focus-visible:ring-2 focus-visible:ring-brand/30">
+          {activeSection === "overview" && <Card>
             <CardHeader>
               <CardTitle>Organization profile</CardTitle>
             </CardHeader>
@@ -2031,8 +2103,8 @@ export function OrganizationDetailsPage({
                 </dd>
               </dl>
             </CardContent>
-          </Card>
-          <Card>
+          </Card>}
+          {activeSection === "ownership" && <Card>
             <CardHeader>
               <CardTitle>Owner and contact</CardTitle>
             </CardHeader>
@@ -2064,8 +2136,45 @@ export function OrganizationDetailsPage({
                 </p>
               )}
             </CardContent>
-          </Card>
-          <Card>
+          </Card>}
+          {activeSection === "members" && <Card>
+            <CardHeader><CardTitle>Organization members</CardTitle></CardHeader>
+            <CardContent>
+              {membersQuery.isLoading ? <p className="py-6 text-center text-sm text-ink-muted">Loading organization members…</p>
+                : membersQuery.isError ? <ErrorMessage>{membersQuery.error.message}</ErrorMessage>
+                  : (membersQuery.data?.members ?? []).length ? <ul className="divide-y divide-line">
+                    {(membersQuery.data?.members ?? []).map((member, index) => <li key={member.id || member.userId || member.accountId || index} className="flex flex-wrap items-center gap-x-8 gap-y-2 py-3 first:pt-0 last:pb-0">
+                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.name || member.email || member.userId || member.accountId || "Unnamed member"}</p><p className="mt-1 break-all text-xs text-ink-muted">{member.email || member.phone || "No contact details"}</p></div>
+                      <Badge variant="outline">{member.roleName || member.role || member.roleId || "Member"}</Badge>
+                      <OrganizationMemberStatus status={member.status} />
+                    </li>)}
+                  </ul> : <p className="py-6 text-center text-sm text-ink-muted">No members found for this organization.</p>}
+            </CardContent>
+          </Card>}
+          {activeSection === "documents" && <Card>
+            <CardHeader><CardTitle>Submitted KYC documents</CardTitle><p className="text-sm text-ink-muted">Documents submitted for this organization’s verification case.</p></CardHeader>
+            <CardContent>
+              {kycProfilesQuery.isLoading ? <p className="py-6 text-center text-sm text-ink-muted">Finding the organization’s KYC case…</p>
+                : kycProfilesQuery.isError ? <ErrorMessage>{kycProfilesQuery.error.message}</ErrorMessage>
+                  : !kycProfile ? <p className="py-6 text-center text-sm text-ink-muted">No organization KYC case was found.</p>
+                    : kycDocumentsQuery.isLoading ? <p className="py-6 text-center text-sm text-ink-muted">Loading submitted documents…</p>
+                      : kycDocumentsQuery.isError ? <ErrorMessage>{kycDocumentsQuery.error.message}</ErrorMessage>
+                        : (kycDocumentsQuery.data?.documents ?? []).length ? <ul className="divide-y divide-line">
+                          {(kycDocumentsQuery.data?.documents ?? []).map((document, index) => {
+                            let documentUrl: string | null = null;
+                            try {
+                              const parsed = new URL(document.refUrl || "");
+                              if (parsed.protocol === "https:" || parsed.protocol === "http:") documentUrl = parsed.href;
+                            } catch { /* Non-URL document references are shown as labels only. */ }
+                            return <li key={document.id || `${document.kind || "document"}-${index}`} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                              <div className="min-w-0"><p className="text-sm font-medium">{document.kind || "KYC document"}</p><p className="mt-1 break-all text-xs text-ink-muted">{document.id || "Document reference unavailable"}</p></div>
+                              {documentUrl ? <a href={documentUrl} target="_blank" rel="noreferrer" className="shrink-0 text-sm font-medium text-brand underline underline-offset-2">View document</a> : <span className="text-xs text-ink-muted">Document link unavailable</span>}
+                            </li>;
+                          })}
+                        </ul> : <p className="py-6 text-center text-sm text-ink-muted">No documents have been submitted for this organization.</p>}
+            </CardContent>
+          </Card>}
+          {activeSection === "commerce" && <Card>
             <CardHeader>
               <CardTitle>Commerce and tax profile</CardTitle>
             </CardHeader>
@@ -2150,8 +2259,9 @@ export function OrganizationDetailsPage({
                 </p>
               )}
             </CardContent>
-          </Card>
-          <OrganizationFeatureFlagsCard organizationId={organization.id} />
+          </Card>}
+          {activeSection === "features" && <OrganizationFeatureFlagsCard organizationId={organization.id} />}
+          </div>
         </div>
       )}
     </section>
@@ -2202,7 +2312,7 @@ export function AccountsOrganizationUsersPage() {
         <CardContent className="p-0">
           <DataTable
             data={members}
-            headers={['Member', 'Contact', 'Role']}
+            headers={['Member', 'Contact', 'Role', 'Status']}
             label="Organization members"
             loading={Boolean(lookupId && membersQuery.isLoading)}
             loadingMessage="Loading organization members…"
@@ -2211,7 +2321,8 @@ export function AccountsOrganizationUsersPage() {
             renderRow={(member, index) => <TableRow key={member.id || member.userId || member.accountId || index}>
               <TableCell><Identity name={member.name || member.email || member.userId || member.accountId || member.id || 'Unnamed member'} secondary={member.status || member.id || member.userId || member.accountId || 'Organization member'} /></TableCell>
               <TableCell>{member.email || member.phone || 'No contact details'}</TableCell>
-              <TableCell>{member.role || 'Member'}</TableCell>
+              <TableCell>{member.roleName || member.role || member.roleId || 'Member'}</TableCell>
+              <TableCell><OrganizationMemberStatus status={member.status} /></TableCell>
             </TableRow>}
             containerClassName=""
           />

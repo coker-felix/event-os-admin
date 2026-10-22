@@ -82,7 +82,9 @@ export interface OrganizationMember {
   name?: string | null
   email?: string | null
   phone?: string | null
+  roleId?: string | null
   role?: string | null
+  roleName?: string | null
   status?: string | null
 }
 
@@ -222,7 +224,7 @@ export function createAdminVendor(token: string, input: CreateAdminVendorInput) 
 }
 
 export async function listOrganizationMembers(token: string, id: string) {
-  const response = await request<{ members?: Array<OrganizationMember | null> | null } | Array<OrganizationMember | null>>(token, `/api/organizations/${encodeURIComponent(id)}/members`)
+  const response = await request<{ members?: Array<OrganizationMember | null> | null } | Array<OrganizationMember | null>>(token, `/api/admin/organizations/${encodeURIComponent(id)}/members`)
   const rows = Array.isArray(response) ? response : response?.members
   return { members: Array.isArray(rows) ? rows.filter((member): member is OrganizationMember => Boolean(member && typeof member === 'object')) : [] }
 }

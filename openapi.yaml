@@ -453,6 +453,41 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{id}/members:
+    get:
+      tags: [Organizations]
+      operationId: HandleAdminListOrganizationMembers
+      summary: List an organization's members
+      description: Requires `admin.users.read`.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      responses:
+        "200":
+          description: Organization members.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        userId: { type: string }
+                        accountId: { type: string }
+                        name: { type: string }
+                        email: { type: string }
+                        phone: { type: string }
+                        roleId: { type: string }
+                        role: { type: string }
+                        roleName: { type: string }
+                        status: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/organization:
     post:
       tags: [Organizations]
@@ -1065,7 +1100,7 @@ paths:
       operationId: HandleAdminUpdateSponsor
       summary: Admin override — edit any sponsor catalog entry
       description: |
-        Same effect as the organizer's `PATCH /api/organizations/{id}/sponsors/{sponsorId}`
+        Same effect as the organizer's `PATCH /api/organizer/{id}/sponsors/{sponsorId}`
         (documented in the Organization API spec) but admin-scoped, bypassing
         the creator-owns-it check events applies to organizer calls.
       parameters:
@@ -1141,7 +1176,7 @@ paths:
         Requires `admin.config.manage`. This sets the platform-wide default
         only — it does not override a scope (org/vendor/venue/account) that
         already has its own override via the organization-scoped
-        `PUT /api/organizations/{id}/feature-flags/{flag}` (Organization API spec).
+        `PUT /api/organizer/{id}/feature-flags/{flag}` (Organization API spec).
       parameters:
         - name: flag
           in: path
@@ -2067,7 +2102,7 @@ paths:
       tags: [Tax & Commerce]
       operationId: HandleAdminGetOrgCommerceProfile
       summary: View an organization's fee-payer override and tax profile
-      description: Requires an admin session (read also via `admin.config.read`). The organizer's own equivalent is `GET /api/organizations/{id}/commerce-profile` (Organization API spec).
+      description: Requires an admin session (read also via `admin.config.read`). The organizer's own equivalent is `GET /api/organizer/{id}/commerce-profile` (Organization API spec).
       parameters:
         - { $ref: "#/components/parameters/PathId" }
       responses:
