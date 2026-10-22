@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Eye, EyeSlash } from '@phosphor-icons/react'
 import { useAuth } from '@/contexts/auth'
 import { AppIconAction } from '@/components/ui/app-icon-action'
 import { DataTable } from '@/components/ui/data-table'
@@ -48,7 +49,7 @@ function ConsumerDetails({ userId, onClose }: { userId: string | null; onClose: 
   const organizations = (organizationsQuery.data?.organizations ?? []).filter((organization) => organization.ownerId === userId)
   const channels = channelsQuery.data?.channels ?? []
   return <Sheet open={Boolean(userId)} onOpenChange={(open) => { if (!open) onClose() }}>
-    <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+    <SheetContent className="w-full overflow-y-auto sm:[&[data-side=right]]:max-w-2xl">
       <SheetHeader><SheetTitle>Account details</SheetTitle><SheetDescription>Profile, sign-in channels, and organization ownership for this consumer.</SheetDescription></SheetHeader>
       <div className="flex-1 space-y-6 overflow-y-auto px-6 pb-6">
         {query.isLoading ? <p className="py-2 text-sm text-ink-muted">Loading account…</p>
@@ -82,6 +83,7 @@ function CreateUserSheet({ open, onOpenChange, onCreated }: { open: boolean; onO
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const mutation = useMutation({
     mutationFn: () => createAdminConsumer(session!.token, {
       name: name.trim(),
@@ -91,7 +93,7 @@ function CreateUserSheet({ open, onOpenChange, onCreated }: { open: boolean; onO
     }),
     onSuccess: async ({ id }) => {
       await queryClient.invalidateQueries({ queryKey: usersQueryKey })
-      setName(''); setEmail(''); setPhone(''); setPassword('')
+      setName(''); setEmail(''); setPhone(''); setPassword(''); setShowPassword(false)
       onOpenChange(false)
       onCreated(id)
     },
@@ -104,7 +106,7 @@ function CreateUserSheet({ open, onOpenChange, onCreated }: { open: boolean; onO
         <label className="block space-y-1.5 text-sm font-medium">Full name<Input autoComplete="name" required value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Email {!phone.trim() && <span className="font-normal text-ink-muted">(required unless phone is provided)</span>}<Input autoComplete="email" type="email" required={!phone.trim()} value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Phone {!email.trim() && <span className="font-normal text-ink-muted">(required unless email is provided)</span>}<Input autoComplete="tel" required={!email.trim()} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-        <label className="block space-y-1.5 text-sm font-medium">Password <span className="font-normal text-ink-muted">(optional)</span><Input autoComplete="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        <label className="block space-y-1.5 text-sm font-medium">Password <span className="font-normal text-ink-muted">(optional)</span><span className="relative block"><Input autoComplete="new-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} className="pr-12" /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)} className="absolute inset-y-0 right-2 grid w-9 place-items-center rounded-lg text-ink-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40">{showPassword ? <EyeSlash size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}</button></span></label>
         {mutation.isError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{mutation.error.message}</p>}
       </form>
       <SheetFooter className="border-t border-line"><Button type="submit" form="create-consumer-form" disabled={mutation.isPending || !name.trim() || (!email.trim() && !phone.trim())}>{mutation.isPending ? 'Creating…' : 'Create account'}</Button></SheetFooter>
