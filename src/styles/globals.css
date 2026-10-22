@@ -99,7 +99,20 @@
   :focus-visible { outline: 3px solid color-mix(in srgb, var(--color-brand) 55%, transparent); outline-offset: 2px; }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
+}
+
+@keyframes route-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.route-enter { animation: route-enter 160ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .route-enter { animation: none; }
 }
 
 @theme inline {

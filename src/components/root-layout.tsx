@@ -224,15 +224,15 @@ export function RootLayout() {
   }, [isDarkMode])
 
   return (
-    <div className={`min-h-screen bg-canvas ${isDarkMode ? 'dark' : ''}`}>
-      <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-line bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
-        <div className="flex h-14 items-center gap-3 border-b border-line px-5">
+    <div className={`min-h-screen bg-canvas text-ink ${isDarkMode ? 'dark' : ''}`}>
+      <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-canvas bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
+        <div className="flex h-14 items-center gap-3 border-line px-5">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-sm font-bold text-white shadow-card">E</span>
-          {!collapsed && <span className="min-w-0"><span className="block text-[15px] font-semibold tracking-tight">event<span className="text-brand">OS</span></span><span className="block text-[11px] text-ink-muted">Admin Console</span></span>}
+          {!collapsed && <span className="min-w-0"><span className="block text-[15px] font-semibold tracking-tight">event<span className="text-brand">OS</span></span><span className="block text-[11px] text-ink-muted">Admin Management Console</span></span>}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-6">
           <nav aria-label="Main navigation" className="space-y-1">
-            <Link to="/app" title={collapsed ? 'Overview' : undefined} aria-current={pathname === '/app' ? 'page' : undefined} className={`flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium transition-colors ${pathname === '/app' ? 'bg-brand-soft text-brand' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
+            <Link to="/app" title={collapsed ? 'Overview' : undefined} aria-current={pathname === '/app' ? 'page' : undefined} className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${pathname === '/app' ? 'bg-brand-soft text-brand dark:text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
               <SquaresFour aria-hidden="true" size={18} weight={pathname === '/app' ? 'fill' : 'duotone'} className="shrink-0" />
               {!collapsed && 'Overview'}
             </Link>
@@ -249,7 +249,7 @@ export function RootLayout() {
                     to={group.items[0].to as never}
                     title={collapsed ? group.label : undefined}
                     onClick={() => setExpanded((current) => { const next = { ...current }; delete next[group.id]; return next })}
-                    className="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+                    className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
                   >
                     <GroupIcon aria-hidden="true" size={18} weight="duotone" className="shrink-0" />
                     {!collapsed && group.label}
@@ -258,7 +258,7 @@ export function RootLayout() {
               }
 
               return <div key={group.id}>
-                <button type="button" onClick={() => setExpanded((current) => ({ ...current, [group.id]: false }))} title={collapsed ? group.label : undefined} aria-expanded={!collapsed} className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-semibold text-ink transition-colors hover:bg-surface-muted">
+                <button type="button" onClick={() => setExpanded((current) => ({ ...current, [group.id]: false }))} title={collapsed ? group.label : undefined} aria-expanded={!collapsed} className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink transition-colors hover:bg-surface-muted">
                   <GroupIcon aria-hidden="true" size={20} weight="duotone" className="shrink-0" />
                   {!collapsed && <><span className="flex-1">{group.label}</span><CaretDown aria-hidden="true" size={12} /></>}
                 </button>
@@ -266,7 +266,7 @@ export function RootLayout() {
                   {group.items.map((item) => {
                     const active = (item.to === '/app/accounts/organizations' && organizationDetailActive) || pathname === item.to || pathname.startsWith(`${item.to}/`)
                     const ItemIcon = itemIcons[item.to] ?? GroupIcon
-                    return <Link key={item.to} to={item.to as never} aria-current={active ? 'page' : undefined} className={`flex min-h-8 items-center gap-2.5 rounded-lg px-2 text-xs transition-colors ${active ? 'bg-brand-soft font-medium text-brand' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
+                    return <Link key={item.to} to={item.to as never} aria-current={active ? 'page' : undefined} className={`flex min-h-8 items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${active ? 'bg-brand-soft font-medium text-brand dark:text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
                       <ItemIcon aria-hidden="true" size={16} weight="duotone" className="shrink-0" />
                       {item.label}
                     </Link>
@@ -287,7 +287,7 @@ export function RootLayout() {
         </div>
       </aside>
       <div className={`min-h-screen transition-[margin] ${collapsed ? 'ml-[76px]' : 'ml-[248px]'}`}>
-        <header className="sticky top-0 z-[5] flex h-14 items-center justify-end gap-4 border-b border-line bg-surface/90 px-8 font-sans text-sm backdrop-blur">
+        <header className="sticky top-0 z-[5] flex h-14 items-center justify-end gap-4 border-b border-canvas bg-surface/90 px-8 font-sans text-sm backdrop-blur">
           <label className="relative flex h-10 w-full max-w-80 items-center gap-2 rounded-full border border-line bg-surface-muted px-3.5 text-ink-muted">
             <MagnifyingGlass size={14} aria-hidden="true" />
             <span className="sr-only">Search</span>
@@ -326,7 +326,7 @@ export function RootLayout() {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <main className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-360 bg-canvas px-8 py-8"><Outlet /></main>
+        <main className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-360 bg-canvas px-8 py-8"><div key={pathname} className="route-enter"><Outlet /></div></main>
       </div>
     </div>
   )

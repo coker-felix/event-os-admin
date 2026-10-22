@@ -24,7 +24,7 @@ export function FilterTabs({
             type="button"
             aria-pressed={selected}
             onClick={() => onValueChange(option.value)}
-            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${selected ? 'bg-surface text-brand shadow-sm' : 'text-ink-muted hover:text-ink'}`}
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${selected ? 'bg-surface text-brand shadow-sm dark:text-white' : 'text-ink-muted hover:text-ink'}`}
           >
             {option.label}
           </button>

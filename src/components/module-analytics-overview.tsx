@@ -5,7 +5,6 @@ import { formatMoney } from '@/lib/money-format'
 import { formatDate } from '@/lib/date-format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Link } from '@tanstack/react-router'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 const statusStyles: Record<string, string> = {
@@ -67,7 +66,7 @@ function OverviewChart({ chart }: { chart: NonNullable<NonNullable<ModuleOvervie
   </Card>
 }
 
-export function ModuleAnalyticsOverview({ module, title, links }: { module: AnalyticsModule; title: string; links: Array<{ label: string; section: string }> }) {
+export function ModuleAnalyticsOverview({ module, title }: { module: AnalyticsModule; title: string }) {
   const { session } = useAuth()
   const overview = useQuery({ queryKey: ['admin', 'analytics', module, 'overview'], queryFn: () => getModuleOverview(session!.token, module), enabled: Boolean(session?.token) })
   const result = overview.data
@@ -91,9 +90,5 @@ export function ModuleAnalyticsOverview({ module, title, links }: { module: Anal
           </>}
       {result?.sources?.length ? <Card><CardHeader><CardTitle>Data sources</CardTitle></CardHeader><CardContent className="space-y-3">{result.sources.filter((source) => source != null).map((source, index) => <div key={`${source.service || 'source'}-${index}`} className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3 last:border-0 last:pb-0"><span className="text-sm font-medium">{source.service || 'Unknown source'}</span><span className="flex items-center gap-2 text-xs text-ink-muted"><Badge className={statusStyles[source.status ?? ''] ?? statusStyles.never_received}>{niceLabel(source.status)}</Badge>{source.updatedAt ? <time dateTime={source.updatedAt}>{formatDate(source.updatedAt.slice(0, 10))}</time> : 'No snapshot received'}</span></div>)}</CardContent></Card> : null}
     </>}
-    {links.length > 0 && <Card><CardHeader><CardTitle>{title} pages</CardTitle></CardHeader><CardContent><ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{links.map((item) => {
-      const to = module === 'contracts' ? `/app/documents/${item.section}` : `/app/${module}/${item.section}`
-      return <li key={item.section}><Link to={to as never} className="flex min-h-16 items-center justify-between gap-3 rounded-lg border border-line px-4 py-3 text-sm font-medium text-ink transition-colors hover:bg-surface-muted"><span>{item.label}</span><span aria-hidden="true" className="text-ink-muted">↗</span></Link></li>
-    })}</ul></CardContent></Card>}
   </section>
 }

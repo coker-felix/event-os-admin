@@ -377,7 +377,7 @@ function DirectoryTable<T extends { id: string }>({
           className="sm:w-64"
         />
       </div>
-      <Card>
+      <Card className="gap-0 py-0">
       <CardContent className="p-0">
         <DataTable
           data={visible}
@@ -526,7 +526,7 @@ function OrganizationReconciliationQueue({
   );
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
   return (
-    <Card>
+    <Card className="gap-0 py-0">
       <CardContent className="p-0">
         <DataTable
           data={visibleItems}
@@ -743,7 +743,7 @@ function VenueClaimsQueue() {
     (pageIndex + 1) * pageSize,
   );
   return (
-    <Card>
+    <Card className="gap-0 py-0">
       <CardContent className="p-0">
         <DataTable
           data={visibleClaims}
@@ -1763,7 +1763,7 @@ export function AccountsOrganizationsPage() {
         }}
         className="sm:w-72"
       /></div>
-      <Card>
+      <Card className="gap-0 py-0">
         <CardContent className="p-0">
           <DataTable
             data={visibleOrganizations}
@@ -2196,7 +2196,7 @@ export function AccountsOrganizationUsersPage() {
       </div>
       {organizationsQuery.isError && <ErrorMessage>{organizationsQuery.error.message}</ErrorMessage>}
       {organizationsQuery.isSuccess && organizations.length === 0 && <p className="text-sm text-ink-muted">No organizations available.</p>}
-      <Card>
+      <Card className="gap-0 py-0">
         <CardContent className="p-0">
           <DataTable
             data={members}

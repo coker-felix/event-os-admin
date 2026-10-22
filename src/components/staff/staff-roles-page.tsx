@@ -143,7 +143,7 @@ export function StaffRolesPage() {
       <div className="flex flex-wrap items-center justify-end gap-3">
       <label className="flex items-center gap-2 text-xs font-medium text-ink-muted">Scope<select value={scope} onChange={(event) => { setScope(event.target.value as 'all' | Scope); setPageIndex(0) }} className="h-9 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-brand"><option value="all">All scopes</option>{scopes.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
       </div>
-      <Card>
+      <Card className="gap-0 py-0">
       <CardContent className="p-0">
         <DataTable data={visible} headers={['Name', 'Scope', 'Description', ...(tab === 'roles' ? [{ label: 'Access', className: 'text-right' }] : [])]} label={tab === 'roles' ? 'Role catalog' : 'Permission catalog'} loading={query.isLoading} loadingMessage={`Loading ${tab}…`} error={query.isError ? query.error.message : null} emptyMessage={`No ${tab} found for this scope.`} pagination={{ pageIndex, pageSize, totalItems: filtered.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(item) => <TableRow key={item.id}>
                 <TableCell><span className="flex items-center gap-2 font-medium"><span className="grid size-8 place-items-center rounded-lg bg-brand-soft text-brand">{tab === 'roles' ? <ShieldCheck size={16} /> : <Key size={16} />}</span>{item.name}</span></TableCell>

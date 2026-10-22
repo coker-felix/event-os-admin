@@ -75,7 +75,7 @@ export function FeatureFlagsPage() {
           onChange={(event) => { setSearch(event.target.value); setPageIndex(0) }}
           className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30 sm:w-64"
         /></div>
-        <Card>
+        <Card className="gap-0 py-0">
       <CardContent className="p-0">
         <DataTable data={visibleFlags} headers={['Feature flag', 'Default state', { label: 'Global default', className: 'text-right' }]} label="Feature flag platform defaults" loading={flagsQuery.isLoading} loadingMessage="Loading feature flags…" error={flagsQuery.isError ? flagsQuery.error.message : null} emptyMessage={search ? 'No feature flags match your search.' : 'No feature flags are registered.'} pagination={{ pageIndex, pageSize, totalItems: filteredFlags.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(flag) => <FeatureFlagRow key={flag.name} flag={flag} />} containerClassName="" />
       </CardContent>

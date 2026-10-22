@@ -152,7 +152,7 @@ export function StaffAdminsPage() {
     </div>
     {error && <ErrorMessage message={error} />}
 <div className="flex justify-end p-4"><input aria-label="Search admin users" placeholder="Search name or email" value={search} onChange={(event) => { setSearch(event.target.value); setPageIndex(0) }} className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30 sm:w-64" /></div>
-        <Card>
+        <Card className="gap-0 py-0">
       <CardContent className="p-0">
         <DataTable data={visibleAdmins} headers={['Admin', 'Status', { label: 'Actions', className: 'text-right' }]} label="Staff accounts" loading={adminsQuery.isLoading} loadingMessage="Loading staff accounts…" error={adminsQuery.isError ? adminsQuery.error.message : null} emptyMessage={filteredAdmins.length ? 'No admins on this page.' : search ? 'No admins match your search.' : 'No staff accounts yet.'} pagination={{ pageIndex, pageSize, totalItems: filteredAdmins.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(admin) => <TableRow key={admin.id}>
                 <TableCell><div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-semibold text-brand">{admin.name.trim().slice(0, 1).toUpperCase() || '?'}</span><span className="min-w-0"><span className="block truncate font-medium text-ink">{admin.name}</span><span className="block truncate text-xs text-ink-muted">{admin.email}</span></span></div></TableCell>

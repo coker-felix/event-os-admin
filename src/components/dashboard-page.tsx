@@ -76,7 +76,7 @@ export function DashboardPage() {
     <div className="space-y-8">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Overview</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Good morning, Alex</h1>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">Good morning, Alex</h1>
         <p className="mt-2 text-sm text-ink-muted">
           <time dateTime="2025-03-17">{formatDate('2025-03-17')}</time>
           <span className="mx-1.5 text-line">·</span>Here's what's happening across your events.
