@@ -2,6 +2,9 @@ openapi: 3.0.3
 info:
   title: Event OS — Admin API
   version: "1.0.0"
+  license:
+    name: Proprietary
+    url: https://eventos.gh
   description: |
     Staff/back-office surface of the Event OS API gateway: platform configuration,
     KYC/KYB review, catalog administration, commerce rules, vendor/venue
@@ -51,10 +54,10 @@ info:
     `stale_revision`, `invalid_version_state`, `retention_active`, `legal_hold`.
 
     ## Rate limiting
-    There is no blanket per-IP or per-key rate limiter at the gateway for admin
-    routes. The only throttling that applies is the general rule above: any
-    backend-reported `ResourceExhausted` condition surfaces as **429**. No admin
-    route in this spec currently enforces a concrete numeric limit.
+    Admin routes use a shared Redis token bucket of 600 requests per minute.
+    Responses include `RateLimit-Limit`, `RateLimit-Remaining`, and
+    `RateLimit-Reset`; rejected requests include `Retry-After` and return 429.
+    Admin requests fail closed with 503 while Redis is unavailable.
 
     ## Pagination conventions (read carefully — they differ by subsystem)
     - **Documents-catalog lists** (platform legal identities, clauses, contract
@@ -80,8 +83,12 @@ info:
   contact:
     name: Event OS Platform Team
 servers:
-  - url: http://localhost:8080
+  - url: http://{host}:8080
     description: Local / docker-compose (ADDR=:8080)
+    variables:
+      host:
+        default: localhost
+        description: Local gateway hostname.
   - url: https://api.eventos.gh
     description: Production — placeholder; point this at the actual deployed gateway host.
 security:
@@ -89,6 +96,8 @@ security:
 tags:
   - name: Auth
     description: Admin credential login and token refresh.
+  - name: Analytics
+    description: Aggregate-only admin module overviews and chart data.
   - name: Users
     description: Consumer account administration.
   - name: Events
@@ -119,6 +128,136 @@ tags:
     description: Retroactive onboarding-contract backfill jobs and on-demand reconciliation.
 
 paths:
+  /api/admin/analytics/{module}/overview:
+    get:
+      tags: [Analytics]
+      operationId: HandleAdminModuleOverview
+      summary: Get aggregate overview analytics for an admin module
+      description: |
+        Requires an admin JWT with `admin.analytics.read`. Returns aggregate
+        metrics and graph-ready chart series for one navigation module. `from`
+        is inclusive and `to` is exclusive; both are normalized to UTC. When
+        omitted, the period is the previous 30 complete UTC days. Data gaps are
+        represented by `freshnessStatus` and per-source status. An absent
+        optional point value means unknown or suppressed; a value of zero is a
+        known zero. Money is expressed in minor units with a separate series
+        for each currency. The response contains no user-level records.
+
+        Expected source services are Accounts: Identity, Vendors, Venues;
+        Events: Events; Ticketing: Ticketing, Payments; Commerce: Platform,
+        Payments; Marketplace: Vendors, Venues; Contracts: Documents, Vendors,
+        Venues; Invoices: Vendors, Venues; Staff: Identity, Platform; Platform:
+        Platform. If no stored snapshot covers the requested period, the API
+        returns empty metrics/charts with `never_received`. If at least one
+        source is present but another expected source is absent, status is
+        `partial` and the missing source is listed. A source snapshot older
+        than 36 hours is `stale`. Metric keys, units,
+        chart IDs, and current coverage are defined in
+        `docs/specs/admin-module-analytics.md`.
+      parameters:
+        - name: module
+          in: path
+          required: true
+          description: Admin navigation module whose aggregate overview is requested.
+          schema:
+            type: string
+            enum: [accounts, events, ticketing, commerce, marketplace, contracts, invoices, staff, platform]
+        - name: from
+          in: query
+          required: false
+          description: Inclusive RFC3339 period start. Provide together with `to`; offsets are accepted and normalized to UTC.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          description: Exclusive RFC3339 period end. Maximum range is 366 days.
+          schema: { type: string, format: date-time }
+        - name: granularity
+          in: query
+          required: false
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        "200":
+          description: >-
+            Aggregate module overview with source freshness for snapshots
+            covering the requested period. If no snapshot covers it, the
+            response has empty metrics/charts/sources and
+            `freshnessStatus: never_received`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [module, generatedAt, from, to, granularity, freshnessStatus, metrics, charts]
+                properties:
+                  module: { type: string, enum: [accounts, events, ticketing, commerce, marketplace, contracts, invoices, staff, platform] }
+                  generatedAt: { type: string, format: date-time }
+                  from: { type: string, format: date-time }
+                  to: { type: string, format: date-time }
+                  granularity: { type: string, enum: [day, week, month] }
+                  freshnessStatus: { type: string, enum: [current, stale, partial, never_received] }
+                  sourceUpdatedAt: { type: string, format: date-time, nullable: true }
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        service: { type: string }
+                        updatedAt: { type: string, format: date-time, nullable: true, description: Null when the expected source has not published a snapshot. }
+                        revision: { type: integer, format: int64 }
+                        status: { type: string, enum: [current, stale, missing] }
+                  metrics:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        label: { type: string }
+                        value: { type: number }
+                        unit: { type: string }
+                        currency: { type: string, description: ISO currency code for monetary metrics; empty for non-monetary metrics. }
+                        numerator: { type: number }
+                        denominator: { type: number }
+                  charts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        chartType: { type: string, enum: [line, bar, donut] }
+                        unit: { type: string }
+                        granularity: { type: string, enum: ["", day, week, month], description: Empty for category-only charts. }
+                        dimension: { type: string }
+                        series:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              key: { type: string }
+                              label: { type: string }
+                              currency: { type: string, description: ISO currency code for monetary series; empty otherwise. }
+                              timePoints:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    timestamp: { type: string, format: date-time }
+                                    value: { type: number, description: Optional. Omitted when unknown or suppressed; zero means known zero. }
+                              categoryPoints:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    categoryKey: { type: string }
+                                    categoryLabel: { type: string }
+                                    value: { type: number, description: Optional. Omitted when unknown or suppressed; zero means known zero. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+        "503": { description: Admin request infrastructure is unavailable, including Redis-backed rate limiting. }
+        "500": { $ref: "#/components/responses/ServerError" }
   # ---------------------------------------------------------------- Auth
   /api/admin/login:
     post:
@@ -1288,6 +1427,30 @@ paths:
                 type: object
                 properties:
                   events: { type: array, items: { $ref: "#/components/schemas/AdminEvent" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-callouts:
+    get:
+      tags: [Events]
+      operationId: HandleAdminListVendorCallouts
+      summary: List open vendor callouts
+      description: Requires `admin.events.read`. Returns callouts accepting vendor applications, with optional category filtering and offset pagination.
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: Open callout page and total count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  callouts: { type: array, items: { $ref: "#/components/schemas/AdminVendorCallout" } }
+                  total: { type: integer, format: int32 }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
@@ -3815,6 +3978,17 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    AdminVendorCallout:
+      type: object
+      properties:
+        id: { type: string }
+        eventId: { type: string }
+        orgId: { type: string }
+        category: { type: string }
+        serviceKinds: { type: array, items: { type: string } }
+        opensAt: { type: integer, format: int64, description: Unix seconds. }
+        closesAt: { type: integer, format: int64, description: Unix seconds. }
+        status: { type: string, enum: [open, closed, cancelled] }
     AdminCreateRecurringEventsRequest:
       type: object
       required: [title, startsAt, endsAt]
@@ -3828,16 +4002,16 @@ components:
         recurrence:
           type: object
           properties:
-            frequency: { type: string, enum: [daily, weekly, monthly], description: Legacy recurrence. }
-            interval: { type: integer, description: Legacy interval; at least 1. }
-            count: { type: integer, description: Legacy occurrence count; 1 to 52. }
+            frequency: { type: string, enum: [daily, weekly, monthly], description: "Legacy recurrence." }
+            interval: { type: integer, description: "Legacy interval; at least 1." }
+            count: { type: integer, description: "Legacy occurrence count; 1 to 52." }
             pattern: { type: string, enum: [daily, weekly, monthly, quarterly, yearly, custom] }
-            rule: { type: string, description: RFC 5545 subset using FREQ, INTERVAL, BYDAY, BYMONTHDAY, BYMONTH, COUNT, and UNTIL. }
+            rule: { type: string, description: "RFC 5545 subset using FREQ, INTERVAL, BYDAY, BYMONTHDAY, BYMONTH, COUNT, and UNTIL." }
         categoryId: { type: integer, format: int32 }
         attendanceType: { type: string, enum: [in_person, virtual, hybrid] }
         countryCode: { type: string }
         subdivisionCode: { type: string }
-        timezone: { type: string, description: IANA zone used to evaluate the recurrence rule. }
+        timezone: { type: string, description: "IANA zone used to evaluate the recurrence rule." }
         tags: { type: array, items: { type: string } }
         variantRule: { type: string, enum: [manual, publish_N_days_before, publish_on_sellout] }
         publishLeadDays: { type: integer, format: int32 }
@@ -3916,8 +4090,11 @@ components:
         lines: { type: array, items: { type: object } }
     Error:
       type: object
+      required: [error, code]
       properties:
         error: { type: string }
+        code: { type: string, description: Stable machine-readable error category. }
+        request_id: { type: string, description: Correlation identifier matching the X-Request-ID response header. }
         reason: { type: string, description: "Structured conflict/validation reason, when applicable." }
 
     AdminTokenPair:
