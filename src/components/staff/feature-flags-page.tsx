@@ -62,10 +62,7 @@ export function FeatureFlagsPage() {
     <div>
       <h1 className="text-xl font-semibold tracking-tight">Feature flags</h1>
       <p className="mt-1 max-w-2xl text-sm text-ink-muted">Control platform-wide defaults for features across Event OS.</p>
-    </div>
-
-    <div role="note" className="rounded-card border border-brand/15 bg-brand-soft/50 px-4 py-3 text-sm leading-6 text-ink-muted">
-      Changes here update the global default. An organization, vendor, venue, or account with its own flag override continues to use that override.
+      <small className="text-sm leading-6 text-ink-muted"> Changes here update the global default. An organization, vendor, venue, or account with its own flag override continues to use that override.</small>
     </div>
 
 <div className="flex justify-end p-4"><input
