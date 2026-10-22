@@ -177,7 +177,15 @@ const navigation: readonly AdminNavigationModule[] = [
     ],
   },
   {
-    id: 'platform', label: 'Platform', icon: '⚙', items: [
+    id: 'staff', label: 'Staff & access', icon: '♙', items: [
+      { label: 'Overview', to: '/app/staff/overview' },
+      { label: 'Admin users', to: '/app/staff/admins' },
+      { label: 'Roles & permissions', to: '/app/staff/roles' },
+      { label: 'Feature flags', to: '/app/staff/flags' },
+    ],
+  },
+  {
+    id: 'platform', label: 'Adminstration', icon: '⚙', items: [
       { label: 'Overview', to: '/app/platform/overview' },
       { label: 'Platform settings', to: '/app/platform/settings' },
       { label: 'Sponsors', to: '/app/platform/sponsors' },
@@ -185,14 +193,6 @@ const navigation: readonly AdminNavigationModule[] = [
       { label: 'Subdivisions', to: '/app/platform/subdivisions' },
       { label: 'Distribution channels', to: '/app/platform/distribution-channels' },
       { label: 'Event categories', to: '/app/platform/event-categories' },
-    ],
-  },
-  {
-    id: 'staff', label: 'Staff & access', icon: '♙', items: [
-      { label: 'Overview', to: '/app/staff/overview' },
-      { label: 'Admin users', to: '/app/staff/admins' },
-      { label: 'Roles & permissions', to: '/app/staff/roles' },
-      { label: 'Feature flags', to: '/app/staff/flags' },
     ],
   },
 ]
