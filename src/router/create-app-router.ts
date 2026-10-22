@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query'
 import { createRouter } from '@tanstack/react-router'
 import type { AnyRoute } from '@tanstack/react-router'
+import { AppErrorBoundary } from '@/components/app-error-boundary'
 
 export function createAppRouter(routeTree: AnyRoute) {
   const queryClient = new QueryClient({
@@ -12,5 +13,6 @@ export function createAppRouter(routeTree: AnyRoute) {
     context: { queryClient },
     defaultPreload: 'intent',
     scrollRestoration: true,
+    defaultErrorComponent: AppErrorBoundary,
   })
 }

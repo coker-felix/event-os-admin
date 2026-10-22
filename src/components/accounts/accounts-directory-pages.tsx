@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/popover";
 import { CaretDown, Check } from "@phosphor-icons/react";
 import { listAdminConsumers } from "@/services/admin-users";
+import { OrganizationFeatureFlagsCard } from "@/components/accounts/organization-feature-flags-card";
 import { formatDate } from "@/lib/date-format";
 import {
   Field,
@@ -2150,6 +2151,7 @@ export function OrganizationDetailsPage({
               )}
             </CardContent>
           </Card>
+          <OrganizationFeatureFlagsCard organizationId={organization.id} />
         </div>
       )}
     </section>

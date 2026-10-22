@@ -177,7 +177,7 @@ const navigation: readonly AdminNavigationModule[] = [
     ],
   },
   {
-    id: 'staff', label: 'Staff & access', icon: '♙', items: [
+    id: 'staff', label: 'Staff & Access', icon: '♙', items: [
       { label: 'Overview', to: '/app/staff/overview' },
       { label: 'Admin users', to: '/app/staff/admins' },
       { label: 'Roles & permissions', to: '/app/staff/roles' },
@@ -216,6 +216,7 @@ export function RootLayout() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDarkMode)
     try {
       window.localStorage.setItem('event-os-admin-theme', isDarkMode ? 'dark' : 'light')
     } catch {

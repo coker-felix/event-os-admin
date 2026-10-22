@@ -6,6 +6,12 @@ export interface FeatureFlag {
   defaultEnabled: boolean
 }
 
+export interface OrganizationFeatureFlag {
+  name: string
+  enabled: boolean
+  overridden: boolean
+}
+
 async function request<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body) headers.set('Content-Type', 'application/json')
@@ -29,5 +35,32 @@ export async function listFeatureFlags(token: string) {
 export async function setFeatureFlagDefault(token: string, name: string, enabled: boolean) {
   return request<FeatureFlag>(token, `/api/admin/feature-flags/${encodeURIComponent(name)}`, {
     method: 'PUT', body: JSON.stringify({ enabled }),
+  })
+}
+
+async function normalizeOrganizationFlags(token: string, path: string, init?: RequestInit) {
+  const payload = await request<{ flags?: Array<OrganizationFeatureFlag | null> | null }>(token, path, init)
+  return {
+    flags: Array.isArray(payload?.flags)
+      ? payload.flags.filter((flag): flag is OrganizationFeatureFlag => Boolean(
+        flag && typeof flag.name === 'string' && typeof flag.enabled === 'boolean' && typeof flag.overridden === 'boolean',
+      ))
+      : [],
+  }
+}
+
+export function getOrganizationFeatureFlags(token: string, organizationId: string) {
+  return normalizeOrganizationFlags(token, `/api/admin/organizations/${encodeURIComponent(organizationId)}/feature-flags`)
+}
+
+export function setOrganizationFeatureFlag(token: string, organizationId: string, name: string, enabled: boolean) {
+  return normalizeOrganizationFlags(token, `/api/admin/organizations/${encodeURIComponent(organizationId)}/feature-flags/${encodeURIComponent(name)}`, {
+    method: 'PUT', body: JSON.stringify({ enabled }),
+  })
+}
+
+export function clearOrganizationFeatureFlag(token: string, organizationId: string, name: string) {
+  return normalizeOrganizationFlags(token, `/api/admin/organizations/${encodeURIComponent(organizationId)}/feature-flags/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
   })
 }

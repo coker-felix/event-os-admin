@@ -6,11 +6,10 @@ import { AppIconAction } from '@/components/ui/app-icon-action'
 import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { TableCell, TableRow } from '@/components/ui/table'
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { changeRolePermission, createPermission, createRole, listPermissions, listRolePermissions, listRoles, type AdminPermission, type AdminRole } from '@/services/admin-rbac'
 
 const roleKeys = {
@@ -52,16 +51,16 @@ function CreateCatalogDialog({ kind, open, onOpenChange }: { kind: 'role' | 'per
     })
   }
 
-  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-    <SheetHeader><SheetTitle>Create {kind}</SheetTitle><SheetDescription>{kind === 'role' ? 'Add a named role within one access scope.' : 'Add a permission that can be granted to a role in the same scope.'}</SheetDescription></SheetHeader>
-    <form id={`create-${kind}-form`} className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={submit}>
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[min(85vh,720px)] overflow-y-auto sm:max-w-lg">
+    <DialogHeader><DialogTitle>Create {kind}</DialogTitle><DialogDescription>{kind === 'role' ? 'Add a named role within one access scope.' : 'Add a permission that can be granted to a role in the same scope.'}</DialogDescription></DialogHeader>
+    <form id={`create-${kind}-form`} className="space-y-4" onSubmit={submit}>
       <label className="block space-y-1.5 text-sm font-medium">Name<Input name="name" placeholder={kind === 'role' ? 'event_reviewer' : 'platform.events.read'} required maxLength={120} /></label>
       <label className="block space-y-1.5 text-sm font-medium">Scope<select name="scope" required defaultValue="platform" className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand">{scopes.map((scope) => <option key={scope} value={scope}>{scope}</option>)}</select></label>
       <label className="block space-y-1.5 text-sm font-medium">Description <span className="font-normal text-ink-muted">(optional)</span><textarea name="description" rows={3} maxLength={500} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30" /></label>
       {error && <FormError message={error} />}
     </form>
-    <SheetFooter className="border-t border-line"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" form={`create-${kind}-form`} disabled={mutation.isPending}>{mutation.isPending ? 'Creating…' : `Create ${kind}`}</Button></SheetFooter>
-  </SheetContent></Sheet>
+    <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" form={`create-${kind}-form`} disabled={mutation.isPending}>{mutation.isPending ? 'Creating…' : `Create ${kind}`}</Button></DialogFooter>
+  </DialogContent></Dialog>
 }
 
 function RolePermissionsDialog({ role, open, onOpenChange, permissions, permissionsLoading, permissionsError }: { role: AdminRole | null; open: boolean; onOpenChange: (open: boolean) => void; permissions: AdminPermission[]; permissionsLoading: boolean; permissionsError: string }) {

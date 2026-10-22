@@ -57,7 +57,8 @@ export async function deleteAdmin(token: string, id: string) {
 }
 
 export async function listAdminRoles(token: string, adminId: string) {
-  return request<{ roles: AdminRole[] }>(token, `/api/admin/admins/${encodeURIComponent(adminId)}/roles`)
+  const payload = await request<{ roles?: AdminRole[] | null }>(token, `/api/admin/admins/${encodeURIComponent(adminId)}/roles`)
+  return { roles: Array.isArray(payload?.roles) ? payload.roles : [] }
 }
 
 export async function assignAdminRole(token: string, adminId: string, roleId: string) {

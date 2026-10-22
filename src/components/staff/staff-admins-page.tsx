@@ -1,16 +1,15 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ShieldCheck, Pause, Play, Trash, UserPlus, X } from '@phosphor-icons/react'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Eye, EyeSlash, ShieldCheck, Pause, Play, Trash, UserPlus, X } from '@phosphor-icons/react'
 import { useAuth } from '@/contexts/auth'
 import { AppIconAction } from '@/components/ui/app-icon-action'
 import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { TableCell, TableRow } from '@/components/ui/table'
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   assignAdminRole, createAdmin, deleteAdmin, listAdminRoles, listAdmins, listRoles,
   removeAdminRole, setAdminStatus, type AdminRole, type AdminUser,
@@ -104,6 +103,7 @@ export function StaffAdminsPage() {
   const [search, setSearch] = useState('')
   const [pageIndex, setPageIndex] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [rolesAdmin, setRolesAdmin] = useState<AdminUser | null>(null)
   const [pendingDelete, setPendingDelete] = useState<AdminUser | null>(null)
   const [error, setError] = useState('')
@@ -134,6 +134,11 @@ export function StaffAdminsPage() {
     `${admin.name} ${admin.email}`.toLowerCase().includes(search.trim().toLowerCase())), [adminsQuery.data?.admins, search])
   const pageCount = Math.max(1, Math.ceil(filteredAdmins.length / pageSize))
   const visibleAdmins = filteredAdmins.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+  const rolesQueries = useQueries({ queries: visibleAdmins.map((admin) => ({
+    queryKey: adminKeys.roles(admin.id),
+    queryFn: () => listAdminRoles(session!.token, admin.id),
+    enabled: Boolean(session?.token),
+  })) })
 
   function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -148,34 +153,34 @@ export function StaffAdminsPage() {
   return <section className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div><h1 className="text-xl font-semibold tracking-tight">Admin users</h1><p className="mt-1 max-w-2xl text-sm text-ink-muted">Create staff accounts and control the platform roles they hold.</p></div>
-      <Button onClick={() => { setFormError(''); setCreateOpen(true) }}><UserPlus size={16} />Add admin</Button>
+      <Button onClick={() => { setFormError(''); setShowPassword(false); setCreateOpen(true) }}><UserPlus size={16} />Add admin</Button>
     </div>
     {error && <ErrorMessage message={error} />}
 <div className="flex justify-end p-4"><input aria-label="Search admin users" placeholder="Search name or email" value={search} onChange={(event) => { setSearch(event.target.value); setPageIndex(0) }} className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30 sm:w-64" /></div>
         <Card className="gap-0 py-0">
       <CardContent className="p-0">
-        <DataTable data={visibleAdmins} headers={['Admin', 'Status', { label: 'Actions', className: 'text-right' }]} label="Staff accounts" loading={adminsQuery.isLoading} loadingMessage="Loading staff accounts…" error={adminsQuery.isError ? adminsQuery.error.message : null} emptyMessage={filteredAdmins.length ? 'No admins on this page.' : search ? 'No admins match your search.' : 'No staff accounts yet.'} pagination={{ pageIndex, pageSize, totalItems: filteredAdmins.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(admin) => <TableRow key={admin.id}>
+        <DataTable data={visibleAdmins} headers={['Admin', 'Status', { label: 'Actions', className: 'text-right' }]} label="Staff accounts" loading={adminsQuery.isLoading} loadingMessage="Loading staff accounts…" error={adminsQuery.isError ? adminsQuery.error.message : null} emptyMessage={filteredAdmins.length ? 'No admins on this page.' : search ? 'No admins match your search.' : 'No staff accounts yet.'} pagination={{ pageIndex, pageSize, totalItems: filteredAdmins.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(admin, index) => <TableRow key={admin.id}>
                 <TableCell><div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-xs font-semibold text-brand">{admin.name.trim().slice(0, 1).toUpperCase() || '?'}</span><span className="min-w-0"><span className="block truncate font-medium text-ink">{admin.name}</span><span className="block truncate text-xs text-ink-muted">{admin.email}</span></span></div></TableCell>
                 <TableCell>{admin.status === 'active' ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{admin.status || 'Unknown'}</Badge>}</TableCell>
                 <TableCell className="text-right"><div className="flex justify-end gap-1">
                   <AppIconAction label={`Manage roles for ${admin.name}`} icon={<ShieldCheck size={16} />} onClick={() => setRolesAdmin(admin)} showLabel />
                   <AppIconAction label={admin.status === 'active' ? `Suspend ${admin.name}` : `Reactivate ${admin.name}`} icon={admin.status === 'active' ? <Pause size={16} /> : <Play size={16} />} disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ admin, status: admin.status === 'active' ? 'suspended' : 'active' })} />
-                  <AppIconAction label={`Remove ${admin.name}`} icon={<Trash size={16} />} disabled={deleteMutation.isPending} onClick={() => setPendingDelete(admin)} />
+                  {rolesQueries[index]?.isSuccess && Array.isArray(rolesQueries[index].data?.roles) && !rolesQueries[index].data.roles.some((role) => role.id === 'super_admin') && <AppIconAction label={`Remove ${admin.name}`} icon={<Trash size={16} />} disabled={deleteMutation.isPending} onClick={() => setPendingDelete(admin)} />}
                 </div></TableCell>
               </TableRow>} containerClassName="" />
       </CardContent>
     </Card>
 
-    <Sheet open={createOpen} onOpenChange={setCreateOpen}><SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-      <SheetHeader><SheetTitle>Add an admin</SheetTitle><SheetDescription>Create a staff login. You can assign platform roles after creating the account.</SheetDescription></SheetHeader>
-      <form id="create-admin-form" className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={submitCreate}>
+    <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setShowPassword(false) }}><DialogContent className="max-h-[min(85vh,720px)] overflow-y-auto sm:max-w-lg">
+      <DialogHeader><DialogTitle>Add an admin</DialogTitle><DialogDescription>Create a staff login. You can assign platform roles after creating the account.</DialogDescription></DialogHeader>
+      <form id="create-admin-form" className="space-y-4" onSubmit={submitCreate}>
         <label className="block space-y-1.5 text-sm font-medium">Full name<Input name="name" autoComplete="name" required maxLength={120} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Email address<Input name="email" type="email" autoComplete="email" required maxLength={254} /></label>
-        <label className="block space-y-1.5 text-sm font-medium">Temporary password<Input name="password" type="password" autoComplete="new-password" required minLength={8} /><span className="block text-xs font-normal text-ink-muted">At least 8 characters. Share it securely and ask the admin to change it.</span></label>
+        <label className="block space-y-1.5 text-sm font-medium">Temporary password<div className="relative"><Input name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={8} className="pr-12" /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)} className="absolute inset-y-0 right-2 grid w-9 place-items-center rounded-lg text-ink-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40">{showPassword ? <EyeSlash size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}</button></div><span className="block text-xs font-normal text-ink-muted">At least 8 characters. Share it securely and ask the admin to change it.</span></label>
         {formError && <ErrorMessage message={formError} />}
       </form>
-      <SheetFooter className="border-t border-line"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button type="submit" form="create-admin-form" disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating…' : 'Create admin'}</Button></SheetFooter>
-    </SheetContent></Sheet>
+      <DialogFooter><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button type="submit" form="create-admin-form" disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating…' : 'Create admin'}</Button></DialogFooter>
+    </DialogContent></Dialog>
 
     <RoleAssignmentDialog admin={rolesAdmin} open={Boolean(rolesAdmin)} onOpenChange={(open) => { if (!open) setRolesAdmin(null) }} />
     <Dialog open={Boolean(pendingDelete)} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}><DialogContent>
