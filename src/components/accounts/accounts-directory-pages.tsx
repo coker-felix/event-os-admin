@@ -315,9 +315,9 @@ function CreateOrganizationSheet({
                 onChange={(event) => setType(event.target.value as typeof type)}
                 className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand"
               >
-                <option value="organizer">Organizer</option>
+                <option value="organizer">Event Organizer/Planner</option>
                 <option value="vendor">Vendor</option>
-                <option value="venue">Venue</option>
+                <option value="venue">Venue Management</option>
               </select>
             </Field>
             {mutation.isError && (
