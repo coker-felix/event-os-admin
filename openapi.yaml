@@ -2469,6 +2469,32 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
+    patch:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminPatchVenue
+      summary: Update venue web and social links
+      description: |-
+        Requires `admin.config.manage`. Send an empty `websiteUrl` string to
+        clear the current website URL. A non-empty `socialLinks` object replaces
+        the existing social links map; an absent or empty object leaves it unchanged.
+      parameters:
+        - { $ref: "#/components/parameters/PathId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PatchDirectoryVenueRequest" }
+      responses:
+        "200":
+          description: Updated venue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Venue" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/venues/{id}/ownership-history:
     get:
       tags: [Vendors & Venues]
@@ -4515,6 +4541,10 @@ components:
         address: { type: string }
         city: { type: string }
         country: { type: string }
+        websiteUrl: { type: string, format: uri }
+        socialLinks:
+          type: object
+          additionalProperties: { type: string, format: uri }
         capacity: { type: integer }
         status: { type: string }
         category: { type: string }
@@ -4534,6 +4564,10 @@ components:
         address: { type: string }
         city: { type: string }
         country: { type: string }
+        websiteUrl: { type: string, format: uri }
+        socialLinks:
+          type: object
+          additionalProperties: { type: string, format: uri }
         capacity: { type: integer }
         category: { type: string }
         description: { type: string }
@@ -4541,6 +4575,17 @@ components:
           type: array
           items: { type: string }
         confirmNotDuplicate: { type: boolean }
+    PatchDirectoryVenueRequest:
+      type: object
+      description: |-
+        An empty websiteUrl clears the URL. A non-empty socialLinks object
+        replaces the links map; an absent or empty object leaves it unchanged.
+      properties:
+        websiteUrl: { type: string, format: uri, description: Empty string clears the current URL. }
+        socialLinks:
+          type: object
+          additionalProperties: { type: string, format: uri }
+          description: A non-empty object replaces the existing map; an empty object does not change it.
     VenueDirectoryEntry:
       type: object
       properties:
@@ -4548,6 +4593,10 @@ components:
         name: { type: string }
         city: { type: string }
         country: { type: string }
+        websiteUrl: { type: string, format: uri }
+        socialLinks:
+          type: object
+          additionalProperties: { type: string, format: uri }
         capacity: { type: integer }
         claimed: { type: boolean }
     CreateDirectoryVenueResponse:

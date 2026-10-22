@@ -78,6 +78,7 @@ const itemIcons: Record<string, Icon> = {
   '/app/accounts/vendors': Storefront,
   '/app/accounts/kyc': Fingerprint,
   '/app/events': Calendar,
+  '/app/events/create': CalendarCheck,
   '/app/ticketing/verify': QrCode,
   '/app/staff/admins': UserGear,
   '/app/staff/roles': LockKey,
@@ -125,8 +126,9 @@ const navigation: readonly AdminNavigationModule[] = [
     ],
   },
   { id: 'events', label: 'Events', icon: '◷', items: [
-    { label: 'Overview', to: '/app/events' },
+    { label: 'Overview', to: '/app/events/overview' },
     { label: 'Manage events', to: '/app/events' },
+    { label: 'Create event', to: '/app/events/create' },
   ] },
   { id: 'ticketing', label: 'Ticketing', icon: '▣', items: [
     { label: 'Overview', to: '/app/ticketing/overview' },
@@ -247,7 +249,8 @@ export function RootLayout() {
             {navigation.map((group) => {
               const GroupIcon = moduleIcons[group.id]
               const organizationDetailActive = group.id === 'accounts' && pathname.startsWith('/app/organizations/')
-              const groupActive = organizationDetailActive || group.items.some((item) => pathname === item.to || pathname.startsWith(`${item.to}/`))
+              const eventDetailActive = group.id === 'events' && /^\/app\/events\/[^/]+$/.test(pathname) && pathname !== '/app/events/create' && pathname !== '/app/events/overview'
+              const groupActive = organizationDetailActive || eventDetailActive || group.items.some((item) => pathname === item.to || pathname.startsWith(`${item.to}/`))
               const isExpanded = expanded[group.id] ?? groupActive
 
               if (!isExpanded) {
@@ -272,7 +275,7 @@ export function RootLayout() {
                 </button>
                 {!collapsed && <div className="space-y-0.5 py-1 pl-7">
                   {group.items.map((item) => {
-                    const active = (item.to === '/app/accounts/organizations' && organizationDetailActive) || pathname === item.to || pathname.startsWith(`${item.to}/`)
+                    const active = (item.to === '/app/accounts/organizations' && organizationDetailActive) || (item.to === '/app/events' && eventDetailActive) || pathname === item.to || pathname.startsWith(`${item.to}/`)
                     const ItemIcon = itemIcons[item.to] ?? GroupIcon
                     return <Link key={item.to} to={item.to as never} aria-current={active ? 'page' : undefined} className={`flex min-h-8 items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${active ? 'bg-brand-soft font-medium text-brand dark:text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
                       <ItemIcon aria-hidden="true" size={16} weight="duotone" className="shrink-0" />

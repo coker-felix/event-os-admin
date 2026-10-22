@@ -1,4 +1,5 @@
 import { CalendarBlankIcon } from '@phosphor-icons/react'
+import { cn } from 'cn'
 
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -14,6 +15,7 @@ export interface AppDatePickerProps {
   onValueChange: (value: ISODate | null) => void
   placeholder?: string
   disabled?: boolean
+  className?: string
 }
 
 export function AppDatePicker({
@@ -21,6 +23,7 @@ export function AppDatePicker({
   onValueChange,
   placeholder = 'Pick a date',
   disabled,
+  className,
 }: AppDatePickerProps) {
   const selectedDate = calendarDateFromISO(value)
 
@@ -32,7 +35,7 @@ export function AppDatePicker({
           <Button
             variant="outline"
             data-empty={!value}
-            className="justify-start text-left font-normal data-[empty=true]:text-muted-foreground"
+            className={cn("justify-start text-left font-normal data-[empty=true]:text-muted-foreground", className)}
           />
         }
       >

@@ -51,6 +51,7 @@ Each rule below was decided once and is cheap to violate by accident. Follow the
 ## Shared UI and styles
 
 - Shared UI is a synced unit. Never edit a synced copy in place. In this repository, treat `src/components/ui` and `src/styles/globals.css` as the canonical shared sources; if synced copies appear under `src/app/shared/ui` or as `styles.css`, update the canonical source and keep the copies in sync through the established workflow.
+- Text input fields use a modest `rounded-lg` radius. Do not use pill-shaped corners on text inputs.
 - Use only Tailwind tokens declared in `src/styles/globals.css` and component classes that are defined in the shared UI. An unresolved `var(--name)` and an undefined class silently render without styling.
 - The project currently has no `check:tokens` script and no `.ica-*` classes. Do not use those names until they are added to the canonical shared styles. Use the equivalent existing component and Tailwind token classes in the meantime; add any needed class or token definition before referencing it.
 

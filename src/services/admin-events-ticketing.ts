@@ -8,6 +8,14 @@ export interface AdminEvent {
   orgId?: string | null
   title?: string | null
   description?: string | null
+  logoUrl?: string | null
+  heroImageUrl?: string | null
+  accentColor?: string | null
+  promoTagline?: string | null
+  donationsEnabled?: boolean | null
+  donationsMinMinor?: Int64Value | null
+  donationsSuggestedMinor?: Int64Value | null
+  donationsMessage?: string | null
   venueId?: string | null
   startsAt?: UnixSeconds | null
   endsAt?: UnixSeconds | null
@@ -56,6 +64,14 @@ export interface AdminOrder {
 export interface AdminEventInput {
   title: string
   description?: string
+  logoUrl?: string
+  heroImageUrl?: string
+  accentColor?: string
+  promoTagline?: string
+  donationsEnabled?: boolean
+  donationsMinMinor?: number
+  donationsSuggestedMinor?: number
+  donationsMessage?: string
   venueId?: string
   startsAt: number
   endsAt: number

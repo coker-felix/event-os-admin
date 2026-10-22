@@ -41,6 +41,7 @@ import {
 import { CaretDown, Check } from "@phosphor-icons/react";
 import { listAdminConsumers } from "@/services/admin-users";
 import { getAdminKycProfile, listAdminKycProfiles } from "@/services/admin-kyc";
+import { listCountries } from "@/services/admin-platform";
 import { OrganizationFeatureFlagsCard } from "@/components/accounts/organization-feature-flags-card";
 import { formatDate } from "@/lib/date-format";
 import {
@@ -64,12 +65,14 @@ import {
   listVenueOrganizationReconciliation,
   listVendorDirectory,
   listVendorOrganizationReconciliation,
+  patchDirectoryVenue,
   resolveVenueOrganization,
   resolveVendorOrganization,
   setVenueStatus,
   setVendorStatus,
   updateVendorTier,
   type AdminVenueClaim,
+  type AdminOrganization,
   type VenueDirectoryEntry,
   type VendorDirectoryEntry,
 } from "@/services/admin-account-directory";
@@ -104,6 +107,15 @@ function OrganizationMemberStatus({ status }: { status?: string | null }) {
         ? "bg-danger-soft text-danger"
         : "";
   return <Badge className={className} variant={className ? "default" : "outline"}>{label}</Badge>;
+}
+
+function safeHttpUrl(value?: string | null) {
+  try {
+    const parsed = new URL(value || "");
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function Identity({ name, secondary }: { name: string; secondary?: string }) {
@@ -269,8 +281,7 @@ function CreateOrganizationSheet({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: organizationsKey });
-      setAccountId("");
-      setName("");
+        setName("");
       setType("organizer");
       onOpenChange(false);
     },
@@ -451,10 +462,14 @@ interface OrganizationLinkItem {
 function ResolveOrganizationRow({
   item,
   queueKey,
+  organizations,
+  organizationsLoading,
   resolve,
 }: {
   item: OrganizationLinkItem;
   queueKey: readonly unknown[];
+  organizations?: AdminOrganization[];
+  organizationsLoading?: boolean;
   resolve: (orgId: string, reason: string) => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
@@ -482,13 +497,37 @@ function ResolveOrganizationRow({
             mutation.mutate();
           }}
         >
-          <Input
-            aria-label={`Managing organization ID for ${item.name}`}
-            placeholder="Organization ID"
-            value={organizationId}
-            onChange={(event) => setOrganizationId(event.target.value)}
-            required
-          />
+          {organizations ? (
+            <select
+              aria-label={`Managing organization for ${item.name}`}
+              value={organizationId}
+              onChange={(event) => setOrganizationId(event.target.value)}
+              required
+              disabled={organizationsLoading || organizations.length === 0}
+              className="h-10 min-w-0 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="">
+                {organizationsLoading
+                  ? "Loading organizations…"
+                  : organizations.length === 0
+                    ? "No organizations available"
+                    : "Select an organization"}
+              </option>
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name || organization.slug || "Unnamed organization"} · {organization.id}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              aria-label={`Managing organization ID for ${item.name}`}
+              placeholder="Organization ID"
+              value={organizationId}
+              onChange={(event) => setOrganizationId(event.target.value)}
+              required
+            />
+          )}
           <Input
             aria-label={`Reason for linking ${item.name}`}
             placeholder="Reason for decision"
@@ -523,6 +562,9 @@ function OrganizationReconciliationQueue({
   loading,
   error,
   queueKey,
+  organizations,
+  organizationsLoading,
+  organizationsError,
   resolve,
 }: {
   title: string;
@@ -531,6 +573,9 @@ function OrganizationReconciliationQueue({
   loading: boolean;
   error: string | null;
   queueKey: readonly unknown[];
+  organizations?: AdminOrganization[];
+  organizationsLoading?: boolean;
+  organizationsError?: string | null;
   resolve: (id: string, orgId: string, reason: string) => Promise<unknown>;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
@@ -551,6 +596,8 @@ function OrganizationReconciliationQueue({
               key={item.id}
               item={item}
               queueKey={queueKey}
+              organizations={organizations}
+              organizationsLoading={organizationsLoading}
               resolve={(orgId, reason) => resolve(item.id, orgId, reason)}
             />
           )}
@@ -573,6 +620,7 @@ function OrganizationReconciliationQueue({
             },
           }}
         />
+        {organizationsError && <p role="alert" className="px-4 py-3 text-sm text-danger">Unable to load organizations: {organizationsError}</p>}
       </CardContent>
     </Card>
   );
@@ -918,17 +966,14 @@ function VendorTierDialog({
 }
 
 function CreateVendorSheet({
-  open,
-  onOpenChange,
-  onCreated,
+  open, onOpenChange, onCreated, organizations, organizationsLoading,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (vendorId?: string) => void;
+  open: boolean; onOpenChange: (open: boolean) => void; onCreated: (vendorId?: string) => void;
+  organizations: AdminOrganization[]; organizationsLoading: boolean;
 }) {
   const { session } = useAuth();
   const queryClient = useQueryClient();
-  const [accountId, setAccountId] = useState("");
+  const [managingOrgId, setManagingOrgId] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
@@ -938,7 +983,7 @@ function CreateVendorSheet({
   const [country, setCountry] = useState("");
   const [description, setDescription] = useState("");
   const reset = () => {
-    setAccountId("");
+    setManagingOrgId("");
     setBusinessName("");
     setContactName("");
     setEmail("");
@@ -951,7 +996,8 @@ function CreateVendorSheet({
   const mutation = useMutation({
     mutationFn: () =>
       createAdminVendor(session!.token, {
-        accountId: accountId.trim(),
+        accountId: organizations.find((organization) => organization.id === managingOrgId)?.ownerId?.trim() || "",
+        managingOrgId,
         businessName: businessName.trim(),
         ...(contactName.trim() ? { contactName: contactName.trim() } : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
@@ -979,7 +1025,7 @@ function CreateVendorSheet({
         onOpenChange(next);
       }}
     >
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetContent className="w-full overflow-y-auto sm:[&[data-side=right]]:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Create vendor profile</SheetTitle>
           <SheetDescription>
@@ -996,12 +1042,13 @@ function CreateVendorSheet({
           }}
         >
           <FieldGroup className="gap-3">
-            <ExistingAccountPicker
-              value={accountId}
-              onChange={setAccountId}
-              enabled={open}
-              label="Vendor account"
-            />
+            <Field>
+              <FieldLabel>Vendor organization</FieldLabel>
+              <select required value={managingOrgId} onChange={(event) => { const id = event.target.value; setManagingOrgId(id); }} disabled={organizationsLoading} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm">
+                <option value="">{organizationsLoading ? "Loading organizations…" : "Choose a vendor organization"}</option>
+                {organizations.filter((organization) => organization.type === "vendor").map((organization) => <option key={organization.id} value={organization.id}>{organization.name || organization.id} · {organization.ownerId || "no owner"}</option>)}
+              </select>
+            </Field>
             <Field>
               <FieldLabel>Business name</FieldLabel>
               <Input
@@ -1076,7 +1123,7 @@ function CreateVendorSheet({
             form="create-admin-vendor"
             disabled={
               mutation.isPending ||
-              !accountId ||
+              !managingOrgId || !organizations.find((organization) => organization.id === managingOrgId)?.ownerId ||
               !businessName.trim() ||
               !email.trim()
             }
@@ -1099,6 +1146,11 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
   const reconciliation = useQuery({
     queryKey: vendorOrgQueueKey,
     queryFn: () => listVendorOrganizationReconciliation(session!.token),
+    enabled: Boolean(session?.token),
+  });
+  const organizationsQuery = useQuery({
+    queryKey: organizationsKey,
+    queryFn: () => listAdminOrganizations(session!.token),
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
@@ -1127,7 +1179,7 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
             setCreateOpen(true);
           }}
         >
-          Add vendor
+          Add vendor profile
         </Button>
       </div>
       {createdVendorId !== undefined && (
@@ -1215,6 +1267,9 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
             loading={reconciliation.isLoading}
             error={reconciliation.isError ? reconciliation.error.message : null}
             queueKey={vendorOrgQueueKey}
+            organizations={(organizationsQuery.data?.organizations ?? []).filter((organization) => organization.type === "vendor")}
+            organizationsLoading={organizationsQuery.isLoading}
+            organizationsError={organizationsQuery.isError ? organizationsQuery.error.message : null}
             resolve={(id, orgId, reason) =>
               resolveVendorOrganization(session!.token, id, orgId, reason)
             }
@@ -1236,6 +1291,8 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={setCreatedVendorId}
+        organizations={organizationsQuery.data?.organizations ?? []}
+        organizationsLoading={organizationsQuery.isLoading}
       />
     </section>
   );
@@ -1250,6 +1307,12 @@ function VenueCreationDialog({
 }) {
   const { session } = useAuth();
   const queryClient = useQueryClient();
+  const countriesQuery = useQuery({
+    queryKey: ["qk-admin-platform-countries"],
+    queryFn: () => listCountries(session!.token),
+    enabled: Boolean(session?.token && open),
+  });
+  const countries = (countriesQuery.data?.countries ?? []).filter((item) => item.enabled);
   const [duplicateCandidates, setDuplicateCandidates] = useState<
     VenueDirectoryEntry[]
   >([]);
@@ -1259,6 +1322,8 @@ function VenueCreationDialog({
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("");
   const [address, setAddress] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [socialLinks, setSocialLinks] = useState<Record<string, string>>({});
   const [category, setCategory] = useState("");
   const [capacity, setCapacity] = useState("");
   const [description, setDescription] = useState("");
@@ -1270,6 +1335,8 @@ function VenueCreationDialog({
     setCity("");
     setCountry("");
     setAddress("");
+    setWebsiteUrl("");
+    setSocialLinks({});
     setCategory("");
     setCapacity("");
     setDescription("");
@@ -1284,6 +1351,8 @@ function VenueCreationDialog({
         ...(address.trim() ? { address: address.trim() } : {}),
         ...(city.trim() ? { city: city.trim() } : {}),
         ...(country.trim() ? { country: country.trim() } : {}),
+        ...(websiteUrl.trim() ? { websiteUrl: websiteUrl.trim() } : {}),
+        ...(Object.values(socialLinks).some((url) => url.trim()) ? { socialLinks: Object.fromEntries(Object.entries(socialLinks).filter(([, url]) => url.trim()).map(([network, url]) => [network, url.trim()])) } : {}),
         ...(category.trim() ? { category: category.trim() } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
         ...(confirmNotDuplicate ? { confirmNotDuplicate: true } : {}),
@@ -1373,10 +1442,17 @@ function VenueCreationDialog({
           <label className="block space-y-1.5 text-sm font-medium">
             Country{" "}
             <span className="font-normal text-ink-muted">(optional)</span>
-            <Input
+            <select
               value={country}
               onChange={(event) => setCountry(event.target.value)}
-            />
+              disabled={countriesQuery.isLoading || countriesQuery.isError || countries.length === 0}
+              className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand"
+            >
+              <option value="">{countriesQuery.isLoading ? "Loading countries…" : countries.length ? "Choose a country" : "No configured countries"}</option>
+              {countries.map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code})</option>)}
+            </select>
+            {countriesQuery.isError && <p role="alert" className="text-xs text-danger">Could not load configured countries: {countriesQuery.error.message}</p>}
+            {countriesQuery.isSuccess && countries.length === 0 && <p className="text-xs text-ink-muted">No enabled countries are configured.</p>}
           </label>
           <label className="block space-y-1.5 text-sm font-medium">
             Category{" "}
@@ -1386,6 +1462,17 @@ function VenueCreationDialog({
               onChange={(event) => setCategory(event.target.value)}
             />
           </label>
+          <label className="block space-y-1.5 text-sm font-medium">
+            Website URL <span className="font-normal text-ink-muted">(optional)</span>
+            <Input type="url" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" />
+          </label>
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium">Social profile links <span className="font-normal text-ink-muted">(optional)</span></legend>
+            {([['facebook', 'Facebook'], ['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['x', 'X'], ['youtube', 'YouTube'], ['linkedin', 'LinkedIn']] as const).map(([key, label]) => <label key={key} className="block space-y-1.5 text-sm font-medium">
+              {label}
+              <Input type="url" value={socialLinks[key] ?? ''} onChange={(event) => setSocialLinks((current) => ({ ...current, [key]: event.target.value }))} placeholder="https://" />
+            </label>)}
+          </fieldset>
           <label className="block space-y-1.5 text-sm font-medium">
             Description{" "}
             <span className="font-normal text-ink-muted">(optional)</span>
@@ -1420,9 +1507,6 @@ function VenueCreationDialog({
           </div>
         )}
         <SheetFooter className="border-t border-line">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
           {duplicateCandidates.length ? (
             <Button disabled={pending} onClick={() => void submit(true)}>
               {pending ? "Creating…" : "Create anyway"}
@@ -1442,6 +1526,44 @@ function VenueCreationDialog({
       </SheetContent>
     </Sheet>
   );
+}
+
+function VenueLinksDialog({ venue, onClose }: { venue: VenueDirectoryEntry | null; onClose: () => void }) {
+  const { session } = useAuth();
+  const queryClient = useQueryClient();
+  const [websiteUrl, setWebsiteUrl] = useState(venue?.websiteUrl || "");
+  const [socialLinks, setSocialLinks] = useState<Record<string, string>>(() => ({ ...(venue?.socialLinks ?? {}) }));
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (!venue) throw new Error("Choose a venue to update.");
+      const links = Object.fromEntries(Object.entries(socialLinks).filter(([, url]) => url.trim()).map(([key, url]) => [key, url.trim()]));
+      return patchDirectoryVenue(session!.token, venue.id, {
+        websiteUrl: websiteUrl.trim(),
+        ...(Object.keys(links).length ? { socialLinks: links } : {}),
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: venueKey });
+      onClose();
+    },
+  });
+  const networks = [...new Set(["facebook", "instagram", "tiktok", "x", "youtube", "linkedin", ...Object.keys(socialLinks)])];
+
+  return <Dialog open={Boolean(venue)} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <DialogContent className="max-h-[min(85vh,760px)] overflow-y-auto sm:max-w-xl">
+      <DialogHeader><DialogTitle>Edit venue links</DialogTitle><DialogDescription>Update the website and social profiles for {venue?.name || "this venue"}. Leave Website URL blank to clear it.</DialogDescription></DialogHeader>
+      <form id="edit-venue-links" className="space-y-4" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+        <label className="block space-y-1.5 text-sm font-medium">Website URL<Input type="url" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" /></label>
+        <fieldset className="space-y-3">
+          <legend className="mb-2 text-sm font-medium">Social profile links</legend>
+          <p className="mb-3 text-xs text-ink-muted">Saving one or more links replaces the current social links map. Leaving all blank keeps it unchanged.</p>
+          {networks.map((key) => <label key={key} className="block space-y-1.5 text-sm font-medium">{key === "x" ? "X" : key[0].toUpperCase() + key.slice(1)}<Input type="url" value={socialLinks[key] ?? ""} onChange={(event) => setSocialLinks((current) => ({ ...current, [key]: event.target.value }))} placeholder="https://" /></label>)}
+        </fieldset>
+        {mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}
+      </form>
+      <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" form="edit-venue-links" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Save links"}</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>;
 }
 
 function VenueOwnershipDialog({
@@ -1528,6 +1650,7 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
   const [historyVenue, setHistoryVenue] = useState<VenueDirectoryEntry | null>(
     null,
   );
+  const [linksVenue, setLinksVenue] = useState<VenueDirectoryEntry | null>(null);
   const [statusVenue, setStatusVenue] = useState<{
     id: string;
     name: string;
@@ -1571,7 +1694,7 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
             onSearch={setSearch}
             emptyTitle="No active venue listings"
             emptyMessage="Add a directory venue or wait for an active venue to appear."
-            columns={["Venue", "Capacity", "Claim status", "Actions"]}
+            columns={["Venue", "City", "Country", "Category", "Capacity", "Status", "Claim status", "Web & social", "Actions"]}
             label="venues"
             renderRow={(venue) => (
               <TableRow key={venue.id}>
@@ -1579,15 +1702,20 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
                   <Identity
                     name={venue.name || "Unnamed venue"}
                     secondary={
-                      [venue.city, venue.country].filter(Boolean).join(", ") ||
-                      "Directory listing"
+                      venue.address || "Directory listing"
                     }
                   />
                 </TableCell>
+                <TableCell>{venue.city || "—"}</TableCell>
+                <TableCell>{venue.country || "—"}</TableCell>
+                <TableCell>{venue.category || "—"}</TableCell>
                 <TableCell className="text-right">
                   {typeof venue.capacity === "number"
                     ? venue.capacity.toLocaleString()
                     : "—"}
+                </TableCell>
+                <TableCell>
+                  {venue.status === "active" ? <Badge className="bg-success-soft text-success">Active</Badge> : venue.status === "suspended" ? <Badge className="bg-danger-soft text-danger">Suspended</Badge> : <Badge variant="outline">{venue.status || "Unknown"}</Badge>}
                 </TableCell>
                 <TableCell>
                   {venue.claimed === true ? (
@@ -1600,8 +1728,20 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
                     <Badge variant="outline">Unknown</Badge>
                   )}
                 </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {safeHttpUrl(venue.websiteUrl) && <a href={safeHttpUrl(venue.websiteUrl)!} target="_blank" rel="noreferrer" className="text-brand underline underline-offset-2">Website</a>}
+                    {Object.entries(venue.socialLinks ?? {}).map(([network, url]) => safeHttpUrl(url) && <a key={network} href={safeHttpUrl(url)!} target="_blank" rel="noreferrer" className="text-brand underline underline-offset-2">{network === "x" ? "X" : network}</a>)}
+                    {!safeHttpUrl(venue.websiteUrl) && !Object.values(venue.socialLinks ?? {}).some((url) => safeHttpUrl(url)) && <span className="text-ink-muted">—</span>}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
+                    <AppIconAction
+                      label={`Edit links for ${venue.name || "venue"}`}
+                      icon={<span aria-hidden="true">↗</span>}
+                      onClick={() => setLinksVenue(venue)}
+                    />
                     <AppIconAction
                       label={`Change status for ${venue.name || "venue"}`}
                       icon={<span aria-hidden="true">↻</span>}
@@ -1645,6 +1785,7 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
         </TabsContent>
       </Tabs>
       <VenueCreationDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <VenueLinksDialog key={linksVenue?.id ?? "no-venue-links"} venue={linksVenue} onClose={() => setLinksVenue(null)} />
       <ProfileStatusDialog
         key={statusVenue?.id ?? "no-venue-status"}
         kind="venue"

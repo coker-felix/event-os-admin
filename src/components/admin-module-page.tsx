@@ -78,6 +78,7 @@ export function AdminModulePage() {
   if (module === 'marketplace' && section === 'venues') return <AccountsVenuesPage />
   if (module === 'marketplace' && section === 'claims') return <AccountsVenuesPage initialTab="claims" />
   if (module === 'marketplace' && section === 'reconciliation') return <MarketplaceReconciliationPage />
+  if (module === 'events' && !section) return <AdminEventsPage />
   if (module === 'events' && section === 'directory') return <AdminEventsPage />
   if (module === 'ticketing' && section === 'verify') return <TicketVerificationPage />
   if ((module === 'documents' || module === 'contracts') && section === 'contracts') return <ContractsPage />

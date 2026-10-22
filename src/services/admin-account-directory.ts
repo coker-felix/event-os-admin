@@ -28,6 +28,8 @@ export interface VenueDirectoryEntry {
   status?: string | null
   category?: string | null
   description?: string | null
+  websiteUrl?: string | null
+  socialLinks?: Record<string, string> | null
   amenities?: Array<string | null> | null
   claimed?: boolean | null
   createdVia?: string | null
@@ -65,6 +67,7 @@ export interface CreateAdminOrganizationInput {
 
 export interface CreateAdminVendorInput {
   accountId: string
+  managingOrgId: string
   businessName: string
   contactName?: string
   email?: string
@@ -96,7 +99,14 @@ export interface DirectoryVenueInput {
   country?: string
   category?: string
   description?: string
+  websiteUrl?: string
+  socialLinks?: Record<string, string>
   confirmNotDuplicate?: boolean
+}
+
+export interface PatchDirectoryVenueInput {
+  websiteUrl?: string
+  socialLinks?: Record<string, string>
 }
 
 export interface AdminVenueClaim {
@@ -194,6 +204,12 @@ export function decideVenueClaim(token: string, claimId: string, decision: 'appr
 export function createDirectoryVenue(token: string, input: DirectoryVenueInput) {
   return request<{ created?: boolean; venue?: VenueDirectoryEntry | null; duplicateCandidates?: Array<VenueDirectoryEntry | null> | null }>(token, '/api/admin/venues', {
     method: 'POST', body: JSON.stringify(input),
+  })
+}
+
+export function patchDirectoryVenue(token: string, id: string, input: PatchDirectoryVenueInput) {
+  return request<VenueDirectoryEntry>(token, `/api/admin/venues/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify(input),
   })
 }
 
