@@ -64,10 +64,8 @@ import {
   listVenueDirectory,
   listVenueOrganizationReconciliation,
   listVendorDirectory,
-  listVendorOrganizationReconciliation,
   patchDirectoryVenue,
   resolveVenueOrganization,
-  resolveVendorOrganization,
   setVenueStatus,
   setVendorStatus,
   updateVendorTier,
@@ -79,7 +77,6 @@ import {
 
 const vendorKey = ["qk-admin-vendor-directory"] as const;
 const venueKey = ["qk-admin-venue-directory"] as const;
-const vendorOrgQueueKey = ["qk-admin-vendor-org-reconciliation"] as const;
 const venueOrgQueueKey = ["qk-admin-venue-org-reconciliation"] as const;
 const venueClaimsKey = ["qk-admin-venue-claims"] as const;
 const organizationsKey = ["qk-admin-organizations"] as const;
@@ -1008,10 +1005,7 @@ function CreateVendorSheet({
         ...(description.trim() ? { description: description.trim() } : {}),
       }),
     onSuccess: async (result) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: vendorKey }),
-        queryClient.invalidateQueries({ queryKey: vendorOrgQueueKey }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: vendorKey });
       onCreated(result.vendor?.id || result.id || "");
       reset();
       onOpenChange(false);
@@ -1136,16 +1130,11 @@ function CreateVendorSheet({
   );
 }
 
-export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?: "directory" | "organizations" } = {}) {
+export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?: "directory" } = {}) {
   const { session } = useAuth();
   const query = useQuery({
     queryKey: vendorKey,
     queryFn: () => listVendorDirectory(session!.token),
-    enabled: Boolean(session?.token),
-  });
-  const reconciliation = useQuery({
-    queryKey: vendorOrgQueueKey,
-    queryFn: () => listVendorOrganizationReconciliation(session!.token),
     enabled: Boolean(session?.token),
   });
   const organizationsQuery = useQuery({
@@ -1193,12 +1182,6 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
         </p>
       )}
       <Tabs defaultValue={initialTab} className="gap-5">
-        <TabsList variant="default" aria-label="Vendor management sections">
-          <TabsTrigger value="directory">Vendor directory</TabsTrigger>
-          <TabsTrigger value="organizations">
-            Managing organization review
-          </TabsTrigger>
-        </TabsList>
         <TabsContent value="directory" className="flex flex-col gap-5">
           <DirectoryTable
             title="Active vendor directory"
@@ -1253,26 +1236,6 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
                 </TableCell>
               </TableRow>
             )}
-          />
-        </TabsContent>
-        <TabsContent value="organizations">
-          <OrganizationReconciliationQueue
-            title="Managing organization review"
-            description="Assign the verified organization that manages each unlinked vendor profile."
-            items={(reconciliation.data?.items ?? []).map((item) => ({
-              id: item.vendorId,
-              name: item.businessName || "Unnamed vendor",
-              ownerAccountId: item.ownerAccountId,
-            }))}
-            loading={reconciliation.isLoading}
-            error={reconciliation.isError ? reconciliation.error.message : null}
-            queueKey={vendorOrgQueueKey}
-            organizations={(organizationsQuery.data?.organizations ?? []).filter((organization) => organization.type === "vendor")}
-            organizationsLoading={organizationsQuery.isLoading}
-            organizationsError={organizationsQuery.isError ? organizationsQuery.error.message : null}
-            resolve={(id, orgId, reason) =>
-              resolveVendorOrganization(session!.token, id, orgId, reason)
-            }
           />
         </TabsContent>
       </Tabs>
@@ -1802,11 +1765,6 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
 
 export function MarketplaceReconciliationPage() {
   const { session } = useAuth();
-  const vendors = useQuery({
-    queryKey: vendorOrgQueueKey,
-    queryFn: () => listVendorOrganizationReconciliation(session!.token),
-    enabled: Boolean(session?.token),
-  });
   const venues = useQuery({
     queryKey: venueOrgQueueKey,
     queryFn: () => listVenueOrganizationReconciliation(session!.token),
@@ -1818,31 +1776,10 @@ export function MarketplaceReconciliationPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Organization reconciliation</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-          Link vendor and venue profiles to the organization that manages them.
+          Link venue profiles to the organization that manages them.
         </p>
       </div>
-      <Tabs defaultValue="vendors" className="gap-5">
-        <TabsList variant="default" aria-label="Profile reconciliation type">
-          <TabsTrigger value="vendors">Vendors</TabsTrigger>
-          <TabsTrigger value="venues">Venues</TabsTrigger>
-        </TabsList>
-        <TabsContent value="vendors">
-          <OrganizationReconciliationQueue
-            title="Vendor organization review"
-            description="Assign the verified organization that manages each unlinked vendor profile."
-            items={(vendors.data?.items ?? []).map((item) => ({
-              id: item.vendorId,
-              name: item.businessName || "Unnamed vendor",
-              ownerAccountId: item.ownerAccountId,
-            }))}
-            loading={vendors.isLoading}
-            error={vendors.isError ? vendors.error.message : null}
-            queueKey={vendorOrgQueueKey}
-            resolve={(id, orgId, reason) =>
-              resolveVendorOrganization(session!.token, id, orgId, reason)
-            }
-          />
-        </TabsContent>
+      <Tabs defaultValue="venues" className="gap-5">
         <TabsContent value="venues">
           <OrganizationReconciliationQueue
             title="Venue organization review"

@@ -2616,65 +2616,6 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "500": { $ref: "#/components/responses/ServerError" }
-  /api/admin/vendor-org-reconciliation:
-    get:
-      tags: [Vendors & Venues]
-      operationId: HandleAdminListVendorOrgReconciliation
-      summary: List vendor profiles whose managing organization is undecided
-      description: Requires `admin.documents.operations.manage`. ID order, default page size 50, max 200.
-      parameters:
-        - { $ref: "#/components/parameters/PageTokenCamel" }
-        - { $ref: "#/components/parameters/PageSizeCamel200" }
-      responses:
-        "200":
-          description: Queued vendors.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: "#/components/schemas/VendorOrgReconciliation" }
-                  nextPageToken: { type: string }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "500": { $ref: "#/components/responses/ServerError" }
-  /api/admin/vendors/{id}/managing-org:
-    post:
-      tags: [Vendors & Venues]
-      operationId: HandleAdminResolveVendorOrgLink
-      summary: Record a vendor's managing organization
-      description: |
-        Requires `admin.documents.operations.manage`. `reason` is required
-        (400 otherwise). The owner account must manage that active vendor-type
-        organization (409 otherwise); already-linked-to-a-different-org is
-        409. Repeating the same decision is idempotent. Never changes the
-        vendor's status.
-      parameters:
-        - { $ref: "#/components/parameters/PathId" }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [managingOrgId, reason]
-              properties:
-                managingOrgId: { type: string }
-                reason: { type: string }
-      responses:
-        "200":
-          description: The vendor's party read.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ResolveVendorPartyResponse" }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/venue-org-reconciliation:
     get:
       tags: [Vendors & Venues]

@@ -251,20 +251,6 @@ export function reviewOrganizationTaxExemption(token: string, id: string, input:
   })
 }
 
-export async function listVendorOrganizationReconciliation(token: string) {
-  const items: Array<{ vendorId: string; ownerAccountId?: string | null; businessName?: string | null; queuedAt?: number | null }> = []
-  let pageToken = ''
-  do {
-    const query = new URLSearchParams({ pageSize: '200', ...(pageToken ? { pageToken } : {}) })
-    const page = await request<{ items?: Array<{ vendorId: string; ownerAccountId?: string | null; businessName?: string | null; queuedAt?: number | null } | null> | null; nextPageToken?: string | null }>(token, `/api/admin/vendor-org-reconciliation?${query}`)
-    if (Array.isArray(page?.items)) items.push(...page.items.filter((item): item is NonNullable<typeof item> => Boolean(item && item.vendorId)))
-    const next = page?.nextPageToken || ''
-    if (!next || next === pageToken) break
-    pageToken = next
-  } while (pageToken)
-  return { items }
-}
-
 export async function listVenueOrganizationReconciliation(token: string) {
   const items: Array<{ venueId: string; ownerAccountId?: string | null; name?: string | null; queuedAt?: number | null }> = []
   let pageToken = ''
@@ -277,12 +263,6 @@ export async function listVenueOrganizationReconciliation(token: string) {
     pageToken = next
   } while (pageToken)
   return { items }
-}
-
-export function resolveVendorOrganization(token: string, id: string, managingOrgId: string, reason: string) {
-  return request(token, `/api/admin/vendors/${encodeURIComponent(id)}/managing-org`, {
-    method: 'POST', body: JSON.stringify({ managingOrgId, reason }),
-  })
 }
 
 export function resolveVenueOrganization(token: string, id: string, managingOrgId: string, reason: string) {
