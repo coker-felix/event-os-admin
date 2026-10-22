@@ -24,13 +24,18 @@ function FormError({ message }: { message: string }) {
   return <p role="alert" className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger">{message}</p>
 }
 
+function roleCodeFromName(name: string) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+
 function CreateCatalogDialog({ kind, open, onOpenChange }: { kind: 'role' | 'permission'; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
+  const [name, setName] = useState('')
   const mutation = useMutation({
-    mutationFn: (input: { name: string; scope: string; description?: string }) => kind === 'role'
-      ? createRole(session!.token, input)
+    mutationFn: (input: { name: string; code?: string; scope: string; description?: string }) => kind === 'role'
+      ? createRole(session!.token, { ...input, code: input.code ?? '' })
       : createPermission(session!.token, input),
     onSuccess: async () => {
       setError('')
@@ -46,6 +51,7 @@ function CreateCatalogDialog({ kind, open, onOpenChange }: { kind: 'role' | 'per
     const description = String(data.get('description') ?? '').trim()
     mutation.mutate({
       name: String(data.get('name') ?? '').trim(),
+      ...(kind === 'role' ? { code: roleCodeFromName(String(data.get('name') ?? '')) } : {}),
       scope: String(data.get('scope') ?? ''),
       ...(description ? { description } : {}),
     })
@@ -54,7 +60,8 @@ function CreateCatalogDialog({ kind, open, onOpenChange }: { kind: 'role' | 'per
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[min(85vh,720px)] overflow-y-auto sm:max-w-lg">
     <DialogHeader><DialogTitle>Create {kind}</DialogTitle><DialogDescription>{kind === 'role' ? 'Add a named role within one access scope.' : 'Add a permission that can be granted to a role in the same scope.'}</DialogDescription></DialogHeader>
     <form id={`create-${kind}-form`} className="space-y-4" onSubmit={submit}>
-      <label className="block space-y-1.5 text-sm font-medium">Name<Input name="name" placeholder={kind === 'role' ? 'event_reviewer' : 'platform.events.read'} required maxLength={120} /></label>
+      <label className="block space-y-1.5 text-sm font-medium">Name<Input name="name" value={name} onChange={(event) => setName(event.target.value)} placeholder={kind === 'role' ? 'Event Reviewer' : 'platform.events.read'} required maxLength={120} /></label>
+      {kind === 'role' && <label className="block space-y-1.5 text-sm font-medium">Code<Input name="code" value={roleCodeFromName(name)} readOnly aria-readonly="true" /></label>}
       <label className="block space-y-1.5 text-sm font-medium">Scope<select name="scope" required defaultValue="platform" className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand">{scopes.map((scope) => <option key={scope} value={scope}>{scope}</option>)}</select></label>
       <label className="block space-y-1.5 text-sm font-medium">Description <span className="font-normal text-ink-muted">(optional)</span><textarea name="description" rows={3} maxLength={500} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/30" /></label>
       {error && <FormError message={error} />}
@@ -67,20 +74,20 @@ function RolePermissionsDialog({ role, open, onOpenChange, permissions, permissi
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
-  const roleId = role?.id ?? ''
+  const roleCode = role?.code ?? ''
   const rolePermissionsQuery = useQuery({
-    queryKey: roleKeys.rolePermissions(roleId),
-    queryFn: () => listRolePermissions(session!.token, roleId),
-    enabled: Boolean(session?.token && roleId && open),
+    queryKey: roleKeys.rolePermissions(roleCode),
+    queryFn: () => listRolePermissions(session!.token, roleCode),
+    enabled: Boolean(session?.token && roleCode && open),
   })
   const assigned = rolePermissionsQuery.data?.permissions ?? []
   const assignedIds = new Set(assigned.map((permission) => permission.id))
   const available = permissions.filter((permission) => permission.scope === role?.scope && !assignedIds.has(permission.id))
   const mutation = useMutation({
-    mutationFn: ({ permissionId, operation }: { permissionId: string; operation: 'grant' | 'revoke' }) => changeRolePermission(session!.token, roleId, permissionId, operation),
+    mutationFn: ({ permissionId, operation }: { permissionId: string; operation: 'grant' | 'revoke' }) => changeRolePermission(session!.token, roleCode, permissionId, operation),
     onSuccess: async () => {
       setError('')
-      await queryClient.invalidateQueries({ queryKey: roleKeys.rolePermissions(roleId) })
+      await queryClient.invalidateQueries({ queryKey: roleKeys.rolePermissions(roleCode) })
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'Could not update this role permission.'),
   })
@@ -144,7 +151,7 @@ export function StaffRolesPage() {
       </div>
       <Card className="gap-0 py-0">
       <CardContent className="p-0">
-        <DataTable data={visible} headers={['Name', 'Scope', 'Description', ...(tab === 'roles' ? [{ label: 'Access', className: 'text-right' }] : [])]} label={tab === 'roles' ? 'Role catalog' : 'Permission catalog'} loading={query.isLoading} loadingMessage={`Loading ${tab}…`} error={query.isError ? query.error.message : null} emptyMessage={`No ${tab} found for this scope.`} pagination={{ pageIndex, pageSize, totalItems: filtered.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(item) => <TableRow key={item.id}>
+        <DataTable data={visible} headers={['Name', 'Scope', 'Description', ...(tab === 'roles' ? [{ label: 'Access', className: 'text-right' }] : [])]} label={tab === 'roles' ? 'Role catalog' : 'Permission catalog'} loading={query.isLoading} loadingMessage={`Loading ${tab}…`} error={query.isError ? query.error.message : null} emptyMessage={`No ${tab} found for this scope.`} pagination={{ pageIndex, pageSize, totalItems: filtered.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(item) => <TableRow key={tab === 'roles' ? (item as AdminRole).code : item.id}>
                 <TableCell><span className="flex items-center gap-2 font-medium"><span className="grid size-8 place-items-center rounded-lg bg-brand-soft text-brand">{tab === 'roles' ? <ShieldCheck size={16} /> : <Key size={16} />}</span>{item.name}</span></TableCell>
                 <TableCell><Badge variant="outline">{item.scope}</Badge></TableCell>
                 <TableCell className="max-w-[34rem] whitespace-normal text-ink-muted">{item.description || '—'}</TableCell>

@@ -28,7 +28,7 @@ function ErrorMessage({ message }: { message: string }) {
 function RoleAssignmentDialog({ admin, open, onOpenChange }: { admin: AdminUser | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { session } = useAuth()
   const queryClient = useQueryClient()
-  const [selectedRoleId, setSelectedRoleId] = useState('')
+  const [selectedRoleCode, setSelectedRoleCode] = useState('')
   const [error, setError] = useState('')
   const id = admin?.id ?? ''
   const assignedQuery = useQuery({
@@ -42,16 +42,16 @@ function RoleAssignmentDialog({ admin, open, onOpenChange }: { admin: AdminUser 
     enabled: Boolean(session?.token && open),
   })
   const assign = useMutation({
-    mutationFn: (roleId: string) => assignAdminRole(session!.token, id, roleId),
+    mutationFn: (roleCode: string) => assignAdminRole(session!.token, id, roleCode),
     onSuccess: async () => {
-      setSelectedRoleId('')
+      setSelectedRoleCode('')
       setError('')
       await queryClient.invalidateQueries({ queryKey: adminKeys.roles(id) })
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'Could not assign this role.'),
   })
   const remove = useMutation({
-    mutationFn: (roleId: string) => removeAdminRole(session!.token, id, roleId),
+    mutationFn: (roleCode: string) => removeAdminRole(session!.token, id, roleCode),
     onSuccess: async () => {
       setError('')
       await queryClient.invalidateQueries({ queryKey: adminKeys.roles(id) })
@@ -59,8 +59,8 @@ function RoleAssignmentDialog({ admin, open, onOpenChange }: { admin: AdminUser 
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'Could not remove this role.'),
   })
   const assigned = assignedQuery.data?.roles ?? []
-  const assignedIds = new Set(assigned.map((role) => role.id))
-  const available = (catalogQuery.data?.roles ?? []).filter((role) => !assignedIds.has(role.id))
+  const assignedCodes = new Set(assigned.map((role) => role.code))
+  const available = (catalogQuery.data?.roles ?? []).filter((role) => !assignedCodes.has(role.code))
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-h-[min(85vh,720px)] overflow-y-auto sm:max-w-lg">
@@ -75,19 +75,19 @@ function RoleAssignmentDialog({ admin, open, onOpenChange }: { admin: AdminUser 
       {!assignedQuery.isLoading && !catalogQuery.isLoading && !assignedQuery.isError && !catalogQuery.isError && <>
         <div className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Assigned roles</h3>
-          {assigned.length ? assigned.map((role) => <div key={role.id} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2.5">
+          {assigned.length ? assigned.map((role) => <div key={role.code} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2.5">
             <div className="min-w-0 flex-1"><p className="text-sm font-medium">{role.name}</p><p className="text-xs text-ink-muted">{role.description || role.scope}</p></div>
-            <AppIconAction label={`Remove ${role.name} role`} icon={<X size={16} />} disabled={remove.isPending} onClick={() => remove.mutate(role.id)} />
+            <AppIconAction label={`Remove ${role.name} role`} icon={<X size={16} />} disabled={remove.isPending} onClick={() => remove.mutate(role.code)} />
           </div>) : <p className="rounded-lg bg-surface-muted px-3 py-3 text-sm text-ink-muted">No roles assigned yet.</p>}
         </div>
-        <form className="space-y-3 border-t border-line pt-4" onSubmit={(event) => { event.preventDefault(); if (selectedRoleId) assign.mutate(selectedRoleId) }}>
+        <form className="space-y-3 border-t border-line pt-4" onSubmit={(event) => { event.preventDefault(); if (selectedRoleCode) assign.mutate(selectedRoleCode) }}>
           <label htmlFor="assign-role" className="block text-sm font-medium">Add a platform role</label>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <select id="assign-role" value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand">
+            <select id="assign-role" value={selectedRoleCode} onChange={(event) => setSelectedRoleCode(event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand">
               <option value="">Choose a role</option>
-              {available.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+              {available.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}
             </select>
-            <Button type="submit" disabled={!selectedRoleId || assign.isPending}><UserPlus size={16} />{assign.isPending ? 'Adding…' : 'Add role'}</Button>
+            <Button type="submit" disabled={!selectedRoleCode || assign.isPending}><UserPlus size={16} />{assign.isPending ? 'Adding…' : 'Add role'}</Button>
           </div>
           {!available.length && <p className="text-xs text-ink-muted">All available platform roles are assigned.</p>}
         </form>
@@ -165,7 +165,7 @@ export function StaffAdminsPage() {
                 <TableCell className="text-right"><div className="flex justify-end gap-1">
                   <AppIconAction label={`Manage roles for ${admin.name}`} icon={<ShieldCheck size={16} />} onClick={() => setRolesAdmin(admin)} showLabel />
                   <AppIconAction label={admin.status === 'active' ? `Suspend ${admin.name}` : `Reactivate ${admin.name}`} icon={admin.status === 'active' ? <Pause size={16} /> : <Play size={16} />} disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ admin, status: admin.status === 'active' ? 'suspended' : 'active' })} />
-                  {rolesQueries[index]?.isSuccess && Array.isArray(rolesQueries[index].data?.roles) && !rolesQueries[index].data.roles.some((role) => role.id === 'super_admin') && <AppIconAction label={`Remove ${admin.name}`} icon={<Trash size={16} />} disabled={deleteMutation.isPending} onClick={() => setPendingDelete(admin)} />}
+                  {rolesQueries[index]?.isSuccess && Array.isArray(rolesQueries[index].data?.roles) && !rolesQueries[index].data.roles.some((role) => role.code === 'super_admin') && <AppIconAction label={`Remove ${admin.name}`} icon={<Trash size={16} />} disabled={deleteMutation.isPending} onClick={() => setPendingDelete(admin)} />}
                 </div></TableCell>
               </TableRow>} containerClassName="" />
       </CardContent>

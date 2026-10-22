@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Archive,
   ArrowCounterClockwise,
@@ -53,6 +54,7 @@ import {
 } from '@phosphor-icons/react'
 import { useSidebarStore } from '../stores/sidebar-store'
 import { useAuth } from '../contexts/auth'
+import { getCurrentAdmin } from '@/services/admin-rbac'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { AdminNavigationModule } from '@/types/admin-modules'
@@ -199,6 +201,14 @@ const navigation: readonly AdminNavigationModule[] = [
 
 export function RootLayout() {
   const { session, signOut } = useAuth()
+  const adminQuery = useQuery({
+    queryKey: ['qk-current-admin', session?.accessExpiresAt ?? session?.refreshExpiresAt ?? 'active-session'],
+    queryFn: () => getCurrentAdmin(session!.token),
+    enabled: Boolean(session?.token),
+    staleTime: 5 * 60 * 1000,
+  })
+  const adminName = adminQuery.data?.name?.trim() || 'Admin'
+  const adminInitials = adminName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'AD'
   const navigate = useNavigate()
   const collapsed = useSidebarStore((state) => state.collapsed)
   const toggle = useSidebarStore((state) => state.toggle)
@@ -282,8 +292,8 @@ export function RootLayout() {
             {collapsed ? <ArrowLineRight aria-hidden="true" size={18} /> : <ArrowLineLeft aria-hidden="true" size={18} />}{!collapsed && 'Collapse sidebar'}
           </button>
           {!collapsed && <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface-muted p-3">
-            <Avatar size="sm"><AvatarFallback className="bg-brand-soft text-xs font-semibold text-brand">AD</AvatarFallback></Avatar>
-            <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold"></p><p className="truncate text-[11px] text-ink-muted">Admin access</p></div>
+            <Avatar size="sm"><AvatarFallback className="bg-brand-soft text-xs font-semibold text-brand">{adminInitials}</AvatarFallback></Avatar>
+            <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{adminName}</p><p className="truncate text-[11px] text-ink-muted">Admin access</p></div>
           </div>}
         </div>
       </aside>
@@ -313,9 +323,9 @@ export function RootLayout() {
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger className="flex shrink-0 items-center gap-3 rounded-full px-1.5 py-1 outline-none hover:bg-surface-muted">
-              <Avatar><AvatarFallback className="bg-brand-soft text-xs font-semibold text-brand">AD</AvatarFallback></Avatar>
+              <Avatar><AvatarFallback className="bg-brand-soft text-xs font-semibold text-brand">{adminInitials}</AvatarFallback></Avatar>
               <span className="hidden text-left sm:block">
-                <span className="block text-xs font-semibold">Administrator</span>
+                <span className="block text-xs font-semibold">{adminName}</span>
                 <span className="block text-[11px] text-ink-muted">Admin access</span>
               </span>
               <CaretDown size={12} aria-hidden="true" className="hidden text-ink-muted sm:block" />

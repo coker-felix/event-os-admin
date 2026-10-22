@@ -676,6 +676,22 @@ paths:
         "500": { $ref: "#/components/responses/ServerError" }
 
   # ---------------------------------------------------------------- Admins & Roles
+  /api/admin/me:
+    get:
+      tags: [Admins & Roles]
+      operationId: HandleAdminMe
+      summary: Get the authenticated admin's profile
+      description: Returns only the current admin's own profile and requires an admin session.
+      responses:
+        "200":
+          description: Current admin profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/admins:
     get:
       tags: [Admins & Roles]
@@ -854,7 +870,7 @@ paths:
       tags: [Admins & Roles]
       operationId: HandleListRoles
       summary: List the role catalog
-      description: Requires `admin.roles.manage`.
+      description: Requires `admin.roles.manage`. The `super_admin` role is omitted from this catalog response.
       parameters:
         - name: scope
           in: query
@@ -885,9 +901,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, scope]
+              required: [code, name, scope]
               properties:
-                name: { type: string }
+                code: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+                name: { type: string, description: Human-readable display label. }
                 scope: { type: string }
                 description: { type: string }
       responses:
@@ -901,6 +918,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Role code or label already exists. }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/permissions:
     get:
@@ -1147,6 +1165,98 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/admin/organizations/{id}/feature-flags:
+    get:
+      tags: [Feature Flags]
+      operationId: HandleGetAdminScopeFlags
+      summary: List effective flags and overrides for an organization
+      description: Requires `admin.config.manage`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Effective flags and override state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flags:
+                    type: array
+                    items: { $ref: "#/components/schemas/ScopeFlag" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /api/admin/organizations/{id}/feature-flags/{flag}:
+    put:
+      tags: [Feature Flags]
+      operationId: HandleSetAdminScopeFlag
+      summary: Override a feature flag for an organization
+      description: Requires `admin.config.manage`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: flag
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties: { enabled: { type: boolean } }
+      responses:
+        "200":
+          description: Updated effective flags and override state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flags:
+                    type: array
+                    items: { $ref: "#/components/schemas/ScopeFlag" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [Feature Flags]
+      operationId: HandleClearAdminScopeFlag
+      summary: Clear an organization's override and use the platform default
+      description: Requires `admin.config.manage`. Idempotent when no override exists.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: flag
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated effective flags and override state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flags:
+                    type: array
+                    items: { $ref: "#/components/schemas/ScopeFlag" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
   # ---------------------------------------------------------------- Catalogs
   /api/admin/countries:
@@ -3976,6 +4086,11 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    ServiceUnavailable:
+      description: The platform feature flag service is unavailable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
     AdminVendorCallout:
@@ -4183,7 +4298,8 @@ components:
       type: object
       properties:
         id: { type: string }
-        name: { type: string }
+        code: { type: string, description: Stable machine identifier. }
+        name: { type: string, description: Human-readable display label. }
         scope: { type: string }
         description: { type: string }
     Permission:
@@ -4199,6 +4315,12 @@ components:
         name: { type: string }
         description: { type: string }
         defaultEnabled: { type: boolean }
+    ScopeFlag:
+      type: object
+      properties:
+        name: { type: string }
+        enabled: { type: boolean, description: The effective value after overrides and defaults. }
+        overridden: { type: boolean, description: Whether this organization has an override. }
 
     # ---- Sponsors
     Sponsor:
