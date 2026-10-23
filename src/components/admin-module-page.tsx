@@ -1,5 +1,5 @@
 import { useLocation, useParams } from '@tanstack/react-router'
-import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, MarketplaceReconciliationPage, OrganizationDetailsPage } from '@/components/accounts/accounts-directory-pages'
+import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVenueOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, MarketplaceReconciliationPage, OrganizationDetailsPage } from '@/components/accounts/accounts-directory-pages'
 import { AdminEventsPage } from '@/components/events/admin-events-page'
 import { ContractsPage } from '@/components/contracts/contracts-page'
 import { InvoicesPage } from '@/components/invoices/invoices-page'
@@ -72,7 +72,7 @@ export function AdminModulePage() {
   if (module === 'organizations' && section) return <OrganizationDetailsPage organizationId={section} />
   if (module === 'accounts' && section === 'organizations') return <AccountsOrganizationsPage />
   if (module === 'accounts' && section === 'org-users') return <AccountsOrganizationUsersPage />
-  if (module === 'accounts' && section === 'venues') return <AccountsVenuesPage />
+  if (module === 'accounts' && section === 'venues') return <AccountsVenueOrganizationsPage />
   if (module === 'accounts' && section === 'vendors') return <AccountsVendorsPage />
   if (module === 'marketplace' && section === 'vendors') return <AccountsVendorsPage />
   if (module === 'marketplace' && section === 'venues') return <AccountsVenuesPage />
