@@ -137,7 +137,15 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
       : typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string'
         ? payload.message
         : `Request failed (${response.status}).`
-    throw new Error(message)
+    const code = typeof payload === 'object' && payload !== null && 'code' in payload && typeof payload.code === 'string'
+      ? payload.code
+      : ''
+    const requestId = typeof payload === 'object' && payload !== null && 'request_id' in payload && typeof payload.request_id === 'string'
+      ? payload.request_id
+      : typeof payload === 'object' && payload !== null && 'requestId' in payload && typeof payload.requestId === 'string'
+        ? payload.requestId
+        : ''
+    throw new Error([message, code ? `Code: ${code}` : '', requestId ? `Request ID: ${requestId}` : ''].filter(Boolean).join(' · '))
   }
   return payload as T
 }
