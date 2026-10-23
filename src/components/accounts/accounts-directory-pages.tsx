@@ -84,13 +84,14 @@ const venueOrgQueueKey = ["qk-admin-venue-org-reconciliation"] as const;
 const venueClaimsKey = ["qk-admin-venue-claims"] as const;
 const organizationsKey = ["qk-admin-organizations"] as const;
 const vendorOrganizationsKey = [...organizationsKey, "vendor"] as const;
+const venueOrganizationsKey = [...organizationsKey, "venue"] as const;
 const accountPickerKey = ["qk-admin-consumers"] as const;
 
 function ErrorMessage({ children }: { children: string }) {
   return (
     <p
       role="alert"
-      className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger"
+      className="break-words rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger"
     >
       {children}
     </p>
@@ -987,7 +988,7 @@ function CreateVendorSheet({
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState("");
   const [city, setCity] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState("GH");
   const [description, setDescription] = useState("");
   const reset = () => {
     setManagingOrgId("");
@@ -997,7 +998,7 @@ function CreateVendorSheet({
     setPhone("");
     setCategory("");
     setCity("");
-    setCountry("");
+    setCountry("GH");
     setDescription("");
   };
   const mutation = useMutation({
@@ -1011,7 +1012,7 @@ function CreateVendorSheet({
         ...(phone.trim() ? { phone: phone.trim() } : {}),
         ...(category.trim() ? { category: category.trim() } : {}),
         ...(city.trim() ? { city: city.trim() } : {}),
-        ...(country.trim() ? { country: country.trim() } : {}),
+        country: country.trim(),
         ...(description.trim() ? { description: description.trim() } : {}),
       }),
     onSuccess: async (result) => {
@@ -1111,8 +1112,9 @@ function CreateVendorSheet({
               />
             </Field>
             <Field>
-              <FieldLabel>Country (optional)</FieldLabel>
+              <FieldLabel>Country</FieldLabel>
               <select
+                required
                 value={country}
                 onChange={(event) => setCountry(event.target.value)}
                 disabled={countriesQuery.isLoading || countriesQuery.isError || configuredCountries.length === 0}
@@ -1145,7 +1147,8 @@ function CreateVendorSheet({
               mutation.isPending ||
               !managingOrgId || !organizations.find((organization) => organization.id === managingOrgId)?.ownerId ||
               !businessName.trim() ||
-              !email.trim()
+              !email.trim() ||
+              !country.trim()
             }
           >
             {mutation.isPending ? "Creating…" : "Create vendor"}
@@ -1725,6 +1728,46 @@ function VenueOwnershipDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+export function AccountsVenueOrganizationsPage() {
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const organizationsQuery = useQuery({
+    queryKey: venueOrganizationsKey,
+    queryFn: () => listAdminOrganizations(session!.token, "venue"),
+    enabled: Boolean(session?.token),
+  });
+  const [search, setSearch] = useState("");
+  const organizations = organizationsQuery.data?.organizations ?? [];
+
+  return <section className="space-y-6">
+    <div>
+      <h1 className="text-xl font-semibold tracking-tight">Venue organizations</h1>
+      <p className="mt-1 max-w-2xl text-sm text-ink-muted">Review organizations registered to operate as venues, including their account and contact details.</p>
+    </div>
+    <DirectoryTable
+      title="Venue organizations"
+      rows={organizations}
+      isLoading={organizationsQuery.isLoading}
+      error={organizationsQuery.isError ? organizationsQuery.error.message : null}
+      search={search}
+      onSearch={setSearch}
+      emptyTitle="No venue organizations found"
+      emptyMessage="Venue organizations will appear here when they are registered."
+      columns={["Organization", "Owner account", "Contact", "Address", "Status", "KYC status", "Actions"]}
+      label="venue organizations"
+      renderRow={(organization) => <TableRow key={organization.id}>
+        <TableCell><Identity name={organization.name || organization.slug || "Unnamed organization"} secondary={organization.slug || organization.id} /></TableCell>
+        <TableCell><span className="block break-all font-mono text-xs">{organization.ownerId || "Owner unavailable"}</span></TableCell>
+        <TableCell><span className="block break-all">{organization.email || "—"}</span><span className="mt-0.5 block text-xs text-ink-muted">{organization.phone || "No phone"}</span></TableCell>
+        <TableCell className="max-w-56 whitespace-normal">{organization.address || "—"}</TableCell>
+        <TableCell>{organization.status === "active" ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{organization.status || "Unknown"}</Badge>}</TableCell>
+        <TableCell>{organization.kycStatus === "approved" ? <Badge className="bg-success-soft text-success">Approved</Badge> : organization.kycStatus === "pending" ? <Badge className="bg-warning-soft text-warning">Pending</Badge> : <Badge variant="outline">{organization.kycStatus || "Unknown"}</Badge>}</TableCell>
+        <TableCell className="text-right"><div className="flex justify-end"><AppIconAction label={`View details for ${organization.name || "venue organization"}`} icon={<span aria-hidden="true">↗</span>} onClick={() => void navigate({ to: "/app/$module/$section" as never, params: { module: "organizations", section: organization.id } as never })} /></div></TableCell>
+      </TableRow>}
+    />
+  </section>;
 }
 
 export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: "directory" | "claims" | "organizations" } = {}) {
