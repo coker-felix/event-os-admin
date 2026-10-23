@@ -28,12 +28,21 @@ import {
 
 const eventsKey = ['qk-admin-events'] as const
 const orgsKey = ['qk-admin-organizations'] as const
+const eventOrganizationsKey = [...orgsKey, 'event-owners'] as const
 const venuesKey = ['qk-admin-venues'] as const
 type EventStatusFilter = '' | 'draft' | 'published' | 'cancelled' | 'completed'
 
 function eventKey(id: string) { return [...eventsKey, 'detail', id] as const }
 function ticketKey(id: string) { return [...eventsKey, id, 'ticket-types'] as const }
 function ordersKey(id: string, offset: number) { return [...eventsKey, id, 'orders', offset] as const }
+
+async function listEventOrganizations(token: string) {
+  const [organizers, venues] = await Promise.all([
+    listAdminOrganizations(token, 'organizer'),
+    listAdminOrganizations(token, 'venue'),
+  ])
+  return { organizations: [...organizers.organizations, ...venues.organizations] }
+}
 
 function eventDateParts(seconds?: number | string | null) {
   const timestamp = Number(seconds)
@@ -474,7 +483,7 @@ export function AdminEventsPage() {
   const [page, setPage] = useState(0)
   const [eventPageSize, setEventPageSize] = useState(10)
   const [editingEvent, setEditingEvent] = useState<AdminEvent | null>(null)
-  const orgsQuery = useQuery({ queryKey: orgsKey, queryFn: () => listAdminOrganizations(session!.token), enabled: Boolean(session?.token) })
+  const orgsQuery = useQuery({ queryKey: eventOrganizationsKey, queryFn: () => listEventOrganizations(session!.token), enabled: Boolean(session?.token) })
   const venuesQuery = useQuery({ queryKey: venuesKey, queryFn: () => listVenueDirectory(session!.token), enabled: Boolean(session?.token) })
   const categoriesQuery = useQuery({ queryKey: ['qk-admin-event-categories'], queryFn: () => listEventCategories(session!.token), enabled: Boolean(session?.token) })
   const publish = useMutation({ mutationFn: (id: string) => publishAdminEvent(session!.token, id), onSuccess: async (_result, id) => { await Promise.all([client.invalidateQueries({ queryKey: eventsKey }), client.invalidateQueries({ queryKey: eventKey(id) })]); toast.success('Event published') }, onError: (error) => toast.error('Could not publish event', { description: error.message }) })
@@ -483,7 +492,7 @@ export function AdminEventsPage() {
   const filtered = useMemo(() => events.filter((event) => `${event.title ?? ''} ${event.id} ${event.orgId ?? ''} ${event.venueId ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())), [events, search])
   const pageCount = Math.max(1, Math.ceil(filtered.length / eventPageSize))
   const visible = filtered.slice(page * eventPageSize, (page + 1) * eventPageSize)
-  const organizations = (orgsQuery.data?.organizations ?? []).filter((org) => org.type !== 'vendor')
+  const organizations = orgsQuery.data?.organizations ?? []
   const venues = venuesQuery.data?.venues ?? []
   const categories = categoriesQuery.data?.categories ?? []
   return <section className="space-y-6">
@@ -499,10 +508,10 @@ export function AdminEventsPage() {
 export function AdminEventCreatePage() {
   const { session } = useAuth()
   const navigate = useNavigate()
-  const orgsQuery = useQuery({ queryKey: orgsKey, queryFn: () => listAdminOrganizations(session!.token), enabled: Boolean(session?.token) })
+  const orgsQuery = useQuery({ queryKey: eventOrganizationsKey, queryFn: () => listEventOrganizations(session!.token), enabled: Boolean(session?.token) })
   const venuesQuery = useQuery({ queryKey: venuesKey, queryFn: () => listVenueDirectory(session!.token), enabled: Boolean(session?.token) })
   const categoriesQuery = useQuery({ queryKey: ['qk-admin-event-categories'], queryFn: () => listEventCategories(session!.token), enabled: Boolean(session?.token) })
-  const organizations = (orgsQuery.data?.organizations ?? []).filter((organization) => organization.type !== 'vendor')
+  const organizations = orgsQuery.data?.organizations ?? []
   const venues = venuesQuery.data?.venues ?? []
   const categories = categoriesQuery.data?.categories ?? []
   const backToEvents = () => navigate({ to: '/app/events' as never })

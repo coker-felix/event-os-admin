@@ -121,7 +121,7 @@ const navigation: readonly AdminNavigationModule[] = [
       { label: 'Users', to: '/app/accounts/users' },
       { label: 'Organizations', to: '/app/accounts/organizations' },
       { label: 'Venues', to: '/app/accounts/venues' },
-      { label: 'Vendors', to: '/app/accounts/vendors' },
+      { label: 'Vendor Profiles', to: '/app/accounts/vendors' },
       { label: 'KYC review', to: '/app/accounts/kyc' },
     ],
   },

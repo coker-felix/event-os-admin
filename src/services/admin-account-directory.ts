@@ -17,6 +17,14 @@ export interface VendorDirectoryEntry {
   onboardingIncomplete?: boolean | null
 }
 
+export interface VendorCatalogService {
+  vendorId?: string | null
+  kind?: string | null
+  name?: string | null
+  priceMinor?: number | string | null
+  currency?: string | null
+}
+
 export interface VenueDirectoryEntry {
   id: string
   ownerAccountId?: string | null
@@ -172,6 +180,11 @@ export function getAdminVendor(token: string, id: string) {
   return request<VendorDirectoryEntry>(token, `/api/admin/vendors/${encodeURIComponent(id)}`)
 }
 
+export async function listVendorCatalogServices(token: string, id: string) {
+  const response = await request<{ services?: Array<VendorCatalogService | null> | null }>(token, `/api/v1/vendors/${encodeURIComponent(id)}/services`)
+  return { services: Array.isArray(response?.services) ? response.services.filter((service): service is VendorCatalogService => Boolean(service && service.kind)) : [] }
+}
+
 export function getAdminVenue(token: string, id: string) {
   return request<VenueDirectoryEntry>(token, `/api/admin/venues/${encodeURIComponent(id)}`)
 }
@@ -221,8 +234,9 @@ export function getOrganizationCommerceProfile(token: string, id: string) {
   return request<OrganizationCommerceProfile>(token, `/api/admin/organizations/${encodeURIComponent(id)}/commerce-profile`)
 }
 
-export async function listAdminOrganizations(token: string) {
-  const response = await request<{ organizations?: Array<AdminOrganization | null> | null } | Array<AdminOrganization | null>>(token, '/api/admin/organizations')
+export async function listAdminOrganizations(token: string, type?: NonNullable<AdminOrganization['type']>) {
+  const query = type ? `?type=${encodeURIComponent(type)}` : ''
+  const response = await request<{ organizations?: Array<AdminOrganization | null> | null } | Array<AdminOrganization | null>>(token, `/api/admin/organizations${query}`)
   const rows = Array.isArray(response) ? response : response?.organizations
   return { organizations: normalizeRows(rows) }
 }

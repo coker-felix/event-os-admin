@@ -397,6 +397,14 @@ paths:
       operationId: HandleAdminListOrganizations
       summary: List organizations
       description: Requires `admin.users.read`. Returns all organizations, newest first.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Restrict results to one organization type.
+          schema:
+            type: string
+            enum: [organizer, vendor, venue]
       responses:
         "200":
           description: Organizations.

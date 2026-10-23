@@ -44,6 +44,7 @@ import { getAdminKycProfile, listAdminKycProfiles } from "@/services/admin-kyc";
 import { listCountries } from "@/services/admin-platform";
 import { OrganizationFeatureFlagsCard } from "@/components/accounts/organization-feature-flags-card";
 import { formatDate } from "@/lib/date-format";
+import { formatMoney } from "@/lib/money-format";
 import {
   Field,
   FieldDescription,
@@ -56,6 +57,7 @@ import {
   createAdminVendor,
   createDirectoryVenue,
   decideVenueClaim,
+  getAdminVendor,
   getOrganizationCommerceProfile,
   getVenueOwnershipHistory,
   listAdminOrganizations,
@@ -64,6 +66,7 @@ import {
   listVenueDirectory,
   listVenueOrganizationReconciliation,
   listVendorDirectory,
+  listVendorCatalogServices,
   patchDirectoryVenue,
   resolveVenueOrganization,
   setVenueStatus,
@@ -80,6 +83,7 @@ const venueKey = ["qk-admin-venue-directory"] as const;
 const venueOrgQueueKey = ["qk-admin-venue-org-reconciliation"] as const;
 const venueClaimsKey = ["qk-admin-venue-claims"] as const;
 const organizationsKey = ["qk-admin-organizations"] as const;
+const vendorOrganizationsKey = [...organizationsKey, "vendor"] as const;
 const accountPickerKey = ["qk-admin-consumers"] as const;
 
 function ErrorMessage({ children }: { children: string }) {
@@ -963,13 +967,19 @@ function VendorTierDialog({
 }
 
 function CreateVendorSheet({
-  open, onOpenChange, onCreated, organizations, organizationsLoading,
+  open, onOpenChange, onCreated, organizations, organizationsLoading, organizationsError,
 }: {
   open: boolean; onOpenChange: (open: boolean) => void; onCreated: (vendorId?: string) => void;
-  organizations: AdminOrganization[]; organizationsLoading: boolean;
+  organizations: AdminOrganization[]; organizationsLoading: boolean; organizationsError?: string;
 }) {
   const { session } = useAuth();
   const queryClient = useQueryClient();
+  const countriesQuery = useQuery({
+    queryKey: ["qk-admin-platform-countries"],
+    queryFn: () => listCountries(session!.token),
+    enabled: Boolean(session?.token && open),
+  });
+  const configuredCountries = (countriesQuery.data?.countries ?? []).filter((item) => item.enabled);
   const [managingOrgId, setManagingOrgId] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [contactName, setContactName] = useState("");
@@ -1038,10 +1048,20 @@ function CreateVendorSheet({
           <FieldGroup className="gap-3">
             <Field>
               <FieldLabel>Vendor organization</FieldLabel>
-              <select required value={managingOrgId} onChange={(event) => { const id = event.target.value; setManagingOrgId(id); }} disabled={organizationsLoading} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm">
-                <option value="">{organizationsLoading ? "Loading organizations…" : "Choose a vendor organization"}</option>
-                {organizations.filter((organization) => organization.type === "vendor").map((organization) => <option key={organization.id} value={organization.id}>{organization.name || organization.id} · {organization.ownerId || "no owner"}</option>)}
+              <select required value={managingOrgId} onChange={(event) => {
+                const id = event.target.value;
+                setManagingOrgId(id);
+                const organization = organizations.find((item) => item.id === id);
+                if (organization) {
+                  setBusinessName(organization.name || "");
+                  setEmail(organization.email || "");
+                  setPhone(organization.phone || "");
+                }
+              }} disabled={organizationsLoading} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm">
+                <option value="">{organizationsLoading ? "Loading organizations…" : organizationsError ? "Organizations unavailable" : organizations.length ? "Choose a vendor organization" : "No vendor organizations available"}</option>
+                {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name || organization.id} · {organization.ownerId || "no owner"}</option>)}
               </select>
+              {organizationsError && <FieldDescription role="alert" className="text-danger">Could not load vendor organizations: {organizationsError}</FieldDescription>}
             </Field>
             <Field>
               <FieldLabel>Business name</FieldLabel>
@@ -1092,10 +1112,16 @@ function CreateVendorSheet({
             </Field>
             <Field>
               <FieldLabel>Country (optional)</FieldLabel>
-              <Input
+              <select
                 value={country}
                 onChange={(event) => setCountry(event.target.value)}
-              />
+                disabled={countriesQuery.isLoading || countriesQuery.isError || configuredCountries.length === 0}
+                className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">{countriesQuery.isLoading ? "Loading countries…" : configuredCountries.length ? "Choose a country" : "No configured countries"}</option>
+                {configuredCountries.map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code})</option>)}
+              </select>
+              {countriesQuery.isError && <FieldDescription role="alert" className="text-danger">Could not load configured countries: {countriesQuery.error.message}</FieldDescription>}
             </Field>
             <Field>
               <FieldLabel>Description (optional)</FieldLabel>
@@ -1132,14 +1158,15 @@ function CreateVendorSheet({
 
 export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?: "directory" } = {}) {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: vendorKey,
     queryFn: () => listVendorDirectory(session!.token),
     enabled: Boolean(session?.token),
   });
   const organizationsQuery = useQuery({
-    queryKey: organizationsKey,
-    queryFn: () => listAdminOrganizations(session!.token),
+    queryKey: vendorOrganizationsKey,
+    queryFn: () => listAdminOrganizations(session!.token, "vendor"),
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
@@ -1156,7 +1183,7 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
-            Vendors
+            Vendor Profiles
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
             Browse active public listings and manage their directory tier.The public directory shows active vendors only.
@@ -1192,16 +1219,21 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
             onSearch={setSearch}
             emptyTitle="No active vendor listings"
             emptyMessage="Add a vendor or wait for an active vendor to appear."
-            columns={["Vendor", "Tier", "Actions"]}
+            columns={["Vendor", "Contact", "Email", "Phone", "Category", "Location", "Tier", "Actions"]}
             label="vendors"
             renderRow={(item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <Identity
                     name={item.businessName || "Unnamed vendor"}
-                    secondary="Public directory listing"
+                    secondary={item.id}
                   />
                 </TableCell>
+                <TableCell>{item.contactName || "—"}</TableCell>
+                <TableCell><span className="block max-w-56 truncate">{item.email || "—"}</span></TableCell>
+                <TableCell>{item.phone || "—"}</TableCell>
+                <TableCell>{item.category || "—"}</TableCell>
+                <TableCell>{[item.city, item.country].filter(Boolean).join(", ") || "—"}</TableCell>
                 <TableCell>
                   {item.tier === "partnered" ? (
                     <Badge className="bg-brand-soft text-brand">
@@ -1217,6 +1249,11 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
+                    <AppIconAction
+                      label={`View profile for ${item.businessName || "vendor"}`}
+                      icon={<span aria-hidden="true">↗</span>}
+                      onClick={() => void navigate({ to: "/app/accounts/vendors/$vendorId" as never, params: { vendorId: item.id } as never })}
+                    />
                     <AppIconAction
                       label={`Change status for ${item.businessName || "vendor"}`}
                       icon={<span aria-hidden="true">↻</span>}
@@ -1256,9 +1293,103 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
         onCreated={setCreatedVendorId}
         organizations={organizationsQuery.data?.organizations ?? []}
         organizationsLoading={organizationsQuery.isLoading}
+        organizationsError={organizationsQuery.isError ? organizationsQuery.error.message : undefined}
       />
     </section>
   );
+}
+
+function displayVendorServicePrice(minor?: number | string | null, currency?: string | null) {
+  if (minor == null || !currency?.trim()) return "Price unavailable";
+  try {
+    return formatMoney(String(minor), currency.trim());
+  } catch {
+    return `${currency.trim().toUpperCase()} ${minor}`;
+  }
+}
+
+export function VendorDetailsPage({ vendorId }: { vendorId: string }) {
+  const [activeSection, setActiveSection] = useState<"profile" | "services" | "callouts" | "bookings">("profile");
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const vendorQuery = useQuery({
+    queryKey: [...vendorKey, "detail", vendorId],
+    queryFn: () => getAdminVendor(session!.token, vendorId),
+    enabled: Boolean(session?.token && vendorId),
+  });
+  const servicesQuery = useQuery({
+    queryKey: [...vendorKey, "services", vendorId],
+    queryFn: () => listVendorCatalogServices(session!.token, vendorId),
+    enabled: Boolean(session?.token && vendorId && activeSection === "services"),
+  });
+  const vendor = vendorQuery.data;
+  const services = servicesQuery.data?.services ?? [];
+  const sections = ["profile", "services", "callouts", "bookings"] as const;
+  const sectionLabels = {
+    profile: "Profile",
+    services: "Services",
+    callouts: "Vendor Callouts",
+    bookings: "Bookings",
+  } as const;
+
+  return <section className="space-y-6">
+    <div>
+      <Button variant="ghost" className="mb-2 px-0" onClick={() => void navigate({ to: "/app/accounts/vendors" as never })}>← Vendors</Button>
+      <h1 className="text-xl font-semibold tracking-tight">{vendor?.businessName || "Vendor profile"}</h1>
+      <p className="mt-1 max-w-2xl text-sm text-ink-muted">Vendor profile details and listed services.</p>
+    </div>
+    {vendorQuery.isLoading ? <Card><CardContent className="py-10 text-center text-sm text-ink-muted">Loading vendor profile…</CardContent></Card>
+      : vendorQuery.isError ? <ErrorMessage>{vendorQuery.error.message}</ErrorMessage>
+        : !vendor ? <Card><CardContent className="py-10 text-center text-sm text-ink-muted">Vendor profile unavailable.</CardContent></Card>
+          : <div className="space-y-5">
+            <Card>
+              <CardContent className="flex flex-wrap items-center gap-4 sm:gap-5">
+                <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-brand-soft text-lg font-semibold text-brand">{(vendor.businessName || "V").trim().slice(0, 1).toUpperCase()}</span>
+                <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-semibold tracking-tight">{vendor.businessName || "Unnamed vendor"}</h2><p className="mt-1 break-all font-mono text-xs text-ink-muted">{vendor.id}</p></div>
+                <div className="flex flex-wrap items-center gap-2">{vendor.status === "active" ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{vendor.status || "Unknown"}</Badge>}{vendor.tier === "partnered" ? <Badge className="bg-brand-soft text-brand">Partnered</Badge> : vendor.tier === "verified" ? <Badge className="bg-success-soft text-success">Verified</Badge> : <Badge variant="outline">Normal</Badge>}</div>
+              </CardContent>
+            </Card>
+            <div role="tablist" aria-label="Vendor sections" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-surface-muted p-1" onKeyDown={(event) => {
+              const currentIndex = sections.indexOf(activeSection);
+              const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? sections.length - 1 : event.key === "ArrowRight" ? (currentIndex + 1) % sections.length : event.key === "ArrowLeft" ? (currentIndex - 1 + sections.length) % sections.length : -1;
+              if (nextIndex >= 0) {
+                event.preventDefault();
+                const nextSection = sections[nextIndex];
+                setActiveSection(nextSection);
+                document.getElementById(`vendor-tab-${nextSection}`)?.focus();
+              }
+            }}>
+              {sections.map((section) => <button key={section} id={`vendor-tab-${section}`} type="button" role="tab" tabIndex={activeSection === section ? 0 : -1} aria-selected={activeSection === section} aria-controls="vendor-section-panel" onClick={() => setActiveSection(section)} className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-brand ${activeSection === section ? "bg-surface text-brand shadow-sm" : "text-ink-muted hover:bg-surface hover:text-ink"}`}>{sectionLabels[section]}</button>)}
+            </div>
+            <div id="vendor-section-panel" role="tabpanel" aria-labelledby={`vendor-tab-${activeSection}`} tabIndex={0} className="outline-none focus-visible:ring-2 focus-visible:ring-brand/30">
+            {activeSection === "profile" && <Card>
+              <CardHeader><CardTitle>Profile details</CardTitle></CardHeader>
+              <CardContent><dl className="grid gap-4 sm:grid-cols-2">
+                <div><dt className="text-xs text-ink-muted">Business name</dt><dd className="mt-1 break-words font-medium">{vendor.businessName || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-ink-muted">Contact name</dt><dd className="mt-1 break-words">{vendor.contactName || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-ink-muted">Email</dt><dd className="mt-1 break-all">{vendor.email || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-ink-muted">Phone</dt><dd className="mt-1 break-words">{vendor.phone || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-ink-muted">Category</dt><dd className="mt-1">{vendor.category || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-ink-muted">Location</dt><dd className="mt-1">{[vendor.city, vendor.country].filter(Boolean).join(", ") || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-ink-muted">Status</dt><dd className="mt-1">{vendor.status || "Unknown"}</dd></div>
+                <div><dt className="text-xs text-ink-muted">Directory tier</dt><dd className="mt-1">{vendor.tier || "Normal"}</dd></div>
+                <div className="sm:col-span-2"><dt className="text-xs text-ink-muted">Description</dt><dd className="mt-1 whitespace-pre-wrap">{vendor.description || "Not provided"}</dd></div>
+              </dl></CardContent>
+            </Card>}
+            {activeSection === "services" && <Card>
+              <CardHeader><CardTitle>Services</CardTitle></CardHeader>
+              <CardContent>
+                {servicesQuery.isLoading ? <p className="py-6 text-center text-sm text-ink-muted">Loading vendor services…</p>
+                  : servicesQuery.isError ? <ErrorMessage>{servicesQuery.error.message}</ErrorMessage>
+                    : services.length === 0 ? <p className="py-6 text-center text-sm text-ink-muted">No services are listed for this vendor.</p>
+                      : <ul className="divide-y divide-line">{services.map((service) => <li key={service.kind} className="flex flex-wrap items-start justify-between gap-3 py-4 first:pt-0 last:pb-0"><div className="min-w-0"><p className="font-medium">{service.name || "Unnamed service"}</p><p className="mt-1 text-xs text-ink-muted">{service.kind || "Service type unavailable"}</p></div><p className="shrink-0 text-right font-medium tabular-nums">{displayVendorServicePrice(service.priceMinor, service.currency)}</p></li>)}</ul>}
+              </CardContent>
+            </Card>}
+            {activeSection === "callouts" && <Card><CardHeader><CardTitle>Vendor callouts</CardTitle></CardHeader><CardContent><p className="text-sm text-ink-muted">Vendor-specific callout responses are not available through the admin API yet.</p></CardContent></Card>}
+            {activeSection === "bookings" && <Card><CardHeader><CardTitle>Bookings</CardTitle></CardHeader><CardContent><p className="text-sm text-ink-muted">Vendor bookings are not available through the admin API yet.</p></CardContent></Card>}
+            </div>
+          </div>}
+  </section>;
 }
 
 function VenueCreationDialog({
@@ -1642,7 +1773,7 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
         <TabsContent value="directory" className="flex flex-col gap-5">
           <div
             role="note"
-            className="rounded-card border border-brand/15 bg-brand-soft/50 px-4 py-3 text-sm leading-6 text-ink-muted"
+            className="rounded-card border border-brand/15 bg-brand-soft/50 px-4 py-1 text-sm leading-6 text-ink-muted"
           >
             The public directory includes active claimed and unclaimed venues.
             Pending and suspended venues are not included in the listing
