@@ -13,6 +13,7 @@ import { calendarDateFromISO, formatDate, isoDateFromParts, type ISODate } from 
 export interface AppDatePickerProps {
   value?: ISODate | null
   onValueChange: (value: ISODate | null) => void
+  minDate?: ISODate
   placeholder?: string
   disabled?: boolean
   className?: string
@@ -21,6 +22,7 @@ export interface AppDatePickerProps {
 export function AppDatePicker({
   value,
   onValueChange,
+  minDate,
   placeholder = 'Pick a date',
   disabled,
   className,
@@ -46,6 +48,7 @@ export function AppDatePicker({
         <Calendar
           mode="single"
           selected={selectedDate}
+          disabled={minDate ? { before: calendarDateFromISO(minDate)! } : undefined}
           onSelect={(date) => onValueChange(date ? isoDateFromParts(date.getFullYear(), date.getMonth() + 1, date.getDate()) : null)}
         />
       </PopoverContent>

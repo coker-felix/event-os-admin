@@ -56,6 +56,11 @@ function eventDateParts(seconds?: number | string | null) {
   return { date: `${year}-${month}-${day}`, time: `${hour}:${minute}` }
 }
 
+function todayISODate() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 function toUnixSeconds(date: string | null, time: string) {
   if (!date || !time) return null
   const parsed = new Date(`${date}T${time}:00`)
@@ -191,7 +196,7 @@ function EventForm({
   const [endsTime, setEndsTime] = useState(end.time)
   const [timezone, setTimezone] = useState(event?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
   const [attendanceType, setAttendanceType] = useState(event?.attendanceType || 'in_person')
-  const [countryCode, setCountryCode] = useState(event?.countryCode || '')
+  const [countryCode, setCountryCode] = useState(event?.countryCode || 'GH')
   const [subdivisionCode, setSubdivisionCode] = useState(event?.subdivisionCode || '')
   const [tags, setTags] = useState((event?.tags ?? []).filter((tag): tag is string => Boolean(tag)).join(', '))
   const [categoryId, setCategoryId] = useState(event?.categoryId ? String(event.categoryId) : '')
@@ -304,7 +309,7 @@ function EventForm({
     setEndsTime(end.time)
     setTimezone(event?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
     setAttendanceType(event?.attendanceType || 'in_person')
-    setCountryCode(event?.countryCode || '')
+    setCountryCode(event?.countryCode || 'GH')
     setSubdivisionCode(event?.subdivisionCode || '')
     setTags((event?.tags ?? []).filter((tag): tag is string => Boolean(tag)).join(', '))
     setCategoryId(event?.categoryId ? String(event.categoryId) : '')
@@ -316,6 +321,9 @@ function EventForm({
   }
   const startsAt = toUnixSeconds(startsOn, startsTime)
   const endsAt = toUnixSeconds(endsOn, endsTime)
+  const formTabs = ['details', 'schedule', ...(!event && recurring ? ['recurrence'] : []), 'location', 'branding', 'donations', 'settings']
+  const activeTabIndex = formTabs.indexOf(activeTab)
+  const isLastTab = activeTabIndex === formTabs.length - 1
   return <form id="admin-event-form" className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
     <Tabs value={activeTab} onValueChange={(value) => setActiveTab(String(value))} className="mt-4 min-h-0 flex-1 gap-5 px-6">
       <TabsList aria-label="Event form sections" className="!h-auto !rounded-xl w-full grid grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-7">
@@ -335,20 +343,20 @@ function EventForm({
         <div className="space-y-3"><div className="flex items-center justify-between"><div><h3 className="text-sm font-medium">Ticket templates</h3><p className="text-xs text-ink-muted">Optionally apply the same ticket setup to each occurrence.</p></div><Button type="button" variant="outline" onClick={() => setTicketTemplates((rows) => [...rows, { name: '', priceMinor: '', total: '', admissionsPerUnit: '1' }])}>Add ticket template</Button></div>{ticketTemplates.map((ticket, index) => <div key={index} className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-4"><label className="space-y-2 text-xs font-medium">Name<Input value={ticket.name} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))} /></label><label className="space-y-2 text-xs font-medium">Price (minor units)<Input type="number" min="0" step="1" value={ticket.priceMinor} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, priceMinor: e.target.value } : row))} /></label><label className="space-y-2 text-xs font-medium">Quantity<Input type="number" min="1" step="1" value={ticket.total} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, total: e.target.value } : row))} /></label><div className="flex items-end justify-between gap-2"><label className="space-y-2 text-xs font-medium">Admissions / unit<Input type="number" min="1" step="1" value={ticket.admissionsPerUnit} onChange={(e) => setTicketTemplates((rows) => rows.map((row, i) => i === index ? { ...row, admissionsPerUnit: e.target.value } : row))} /></label><Button type="button" variant="ghost" aria-label={`Remove ticket template ${index + 1}`} onClick={() => setTicketTemplates((rows) => rows.filter((_, i) => i !== index))}>Remove</Button></div></div>)}</div>
       </TabsContent>}
       <TabsContent value="schedule" className="event-form-tab-panel space-y-4 pb-6">
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Starts on<div><AppDatePicker className="w-full" value={startsOn} onValueChange={setStartsOn} /></div></label><label className="block space-y-2.5 text-sm font-medium">Start time<input type="time" value={startsTime} onChange={(e) => setStartsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Ends on<div><AppDatePicker className="w-full" value={endsOn} onValueChange={setEndsOn} /></div></label><label className="block space-y-2.5 text-sm font-medium">End time<input type="time" value={endsTime} onChange={(e) => setEndsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Starts on<div><AppDatePicker className="w-full" value={startsOn} minDate={!event ? todayISODate() : undefined} onValueChange={(value) => { setStartsOn(value); if (value && endsOn && endsOn < value) setEndsOn(value) }} /></div></label><label className="block space-y-2.5 text-sm font-medium">Start time<input type="time" value={startsTime} onChange={(e) => setStartsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Ends on<div><AppDatePicker className="w-full" value={endsOn} minDate={startsOn || todayISODate()} onValueChange={setEndsOn} /></div></label><label className="block space-y-2.5 text-sm font-medium">End time<input type="time" value={endsTime} onChange={(e) => setEndsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
         {startsOn && <p className="text-xs text-ink-muted">Starts {formatDate(startsOn)}{startsTime ? ` at ${startsTime}` : ''}; saved in the selected timezone.</p>}
       </TabsContent>
       <TabsContent value="location" className="event-form-tab-panel space-y-4 pb-6">
-        <label className="block space-y-2.5 text-sm font-medium">Attendance<select value={attendanceType} onChange={(e) => setAttendanceType(e.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="in_person">In person</option><option value="virtual">Virtual</option><option value="hybrid">Hybrid</option></select></label>
-        <SearchableOptionField label="Venue (optional)" value={venueId} onChange={setVenueId} options={venueOptions} emptyOption={{ value: '', label: 'No venue selected' }} placeholder="Select a venue" searchPlaceholder="Search venues…" emptyMessage="No venues match your search." loading={venuesQuery.isLoading} error={venuesQuery.isError ? venuesQuery.error.message : undefined} />
+        <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2.5 text-sm font-medium">Attendance<select value={attendanceType} onChange={(e) => setAttendanceType(e.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="in_person">In person</option><option value="virtual">Virtual</option><option value="hybrid">Hybrid</option></select></label>
+        <SearchableOptionField label="Venue (optional)" value={venueId} onChange={setVenueId} options={venueOptions} emptyOption={{ value: '', label: 'No venue selected' }} placeholder="Select a venue" searchPlaceholder="Search venues…" emptyMessage="No venues match your search." loading={venuesQuery.isLoading} error={venuesQuery.isError ? venuesQuery.error.message : undefined} /></div>
         <div className="grid gap-4 sm:grid-cols-2"><SearchableOptionField label="Country" value={countryCode} onChange={setCountryCode} options={countryOptions} emptyOption={{ value: '', label: 'No country selected' }} placeholder="Select a country" searchPlaceholder="Search configured countries…" emptyMessage="No countries match your search." loading={countriesQuery.isLoading} error={countriesQuery.isError ? countriesQuery.error.message : undefined} /><label className="block space-y-2.5 text-sm font-medium">Subdivision code<Input value={subdivisionCode} onChange={(e) => setSubdivisionCode(e.target.value.toUpperCase())} placeholder="GH-AA" /></label></div>
       </TabsContent>
       <TabsContent value="branding" className="event-form-tab-panel space-y-4 pb-6">
-        <label className="block space-y-2.5 text-sm font-medium">Logo URL<Input type="url" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" /></label>
-        <label className="block space-y-2.5 text-sm font-medium">Hero image URL<Input type="url" value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} placeholder="https://…" /></label>
-        <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2.5 text-sm font-medium">Accent color<Input value={accentColor} onChange={(e) => setAccentColor(e.target.value)} placeholder="#2563EB" maxLength={7} /></label><label className="block space-y-2.5 text-sm font-medium">Promo tagline<Input value={promoTagline} onChange={(e) => setPromoTagline(e.target.value)} maxLength={200} /></label></div>
-        <p role="status" className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">Branding fields are included in this form, but the current admin API does not yet save them.</p>
+        <label className="block space-y-2.5 text-sm font-medium">Logo<Input type="file" accept="image/*" disabled aria-describedby="branding-upload-status" /></label>
+        <label className="block space-y-2.5 text-sm font-medium">Banner image<Input type="file" accept="image/*" disabled aria-describedby="branding-upload-status" /></label>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2.5 text-sm font-medium">Accent color<div className="flex gap-2"><Input type="color" aria-label="Choose accent color" value={/^#[0-9a-fA-F]{6}$/.test(accentColor) ? accentColor : '#2563EB'} onChange={(e) => setAccentColor(e.target.value)} className="w-14 p-1" /><Input value={accentColor} onChange={(e) => setAccentColor(e.target.value)} placeholder="#2563EB" maxLength={7} /></div></label><label className="block space-y-2.5 text-sm font-medium">Promo tagline<Input value={promoTagline} onChange={(e) => setPromoTagline(e.target.value)} maxLength={200} /></label></div>
+        <p id="branding-upload-status" role="status" className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">Image uploads are unavailable until the admin API provides a media upload endpoint. Branding fields are also not yet saved by the current admin API.</p>
       </TabsContent>
       <TabsContent value="donations" className="event-form-tab-panel space-y-4 pb-6">
         <label className="flex items-center justify-between gap-3 text-sm font-medium">Enable donations<input type="checkbox" checked={donationsEnabled} onChange={(e) => setDonationsEnabled(e.target.checked)} className="size-4 accent-brand" /></label>
@@ -364,7 +372,7 @@ function EventForm({
       </TabsContent>
     </Tabs>
     <div className="px-6">{mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}{validationMessage && <ErrorMessage>{validationMessage}</ErrorMessage>}{startsAt !== null && endsAt !== null && endsAt <= startsAt && <ErrorMessage>Event end must be after the start.</ErrorMessage>}</div>
-    <SheetFooter className="mt-5 flex-row justify-end border-t border-line"><Button type="button" variant="outline" onClick={() => setResetConfirmOpen(true)}>Reset form</Button><Button type="submit" form="admin-event-form" disabled={mutation.isPending || !title.trim() || (!orgId && !event) || startsAt === null || endsAt === null || endsAt <= startsAt}>{mutation.isPending ? 'Saving…' : event ? 'Save changes' : 'Create draft'}</Button></SheetFooter>
+    <SheetFooter className="mt-5 flex-row justify-between border-t border-line"><Button type="button" variant="outline" onClick={() => setResetConfirmOpen(true)}>Reset form</Button><div className="flex gap-2">{activeTabIndex > 0 && <Button type="button" variant="outline" onClick={() => setActiveTab(formTabs[activeTabIndex - 1])}>Previous</Button>}{isLastTab ? <Button type="submit" form="admin-event-form" disabled={mutation.isPending || !title.trim() || (!orgId && !event) || startsAt === null || endsAt === null || endsAt <= startsAt}>{mutation.isPending ? 'Saving…' : event ? 'Save changes' : 'Create draft'}</Button> : <Button type="button" onClick={() => setActiveTab(formTabs[activeTabIndex + 1])}>Next</Button>}</div></SheetFooter>
     <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
       <DialogContent>
         <DialogHeader>
