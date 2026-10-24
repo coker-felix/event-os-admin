@@ -291,10 +291,6 @@ export function RootLayout() {
           <button onClick={toggle} className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-ink-muted hover:bg-surface-muted" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
             {collapsed ? <ArrowLineRight aria-hidden="true" size={18} /> : <ArrowLineLeft aria-hidden="true" size={18} />}{!collapsed && 'Collapse sidebar'}
           </button>
-          {!collapsed && <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface-muted p-3">
-            <Avatar size="sm"><AvatarFallback className="bg-brand-soft text-xs font-semibold text-brand">{adminInitials}</AvatarFallback></Avatar>
-            <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{adminName}</p><p className="truncate text-[11px] text-ink-muted">Admin access</p></div>
-          </div>}
         </div>
       </aside>
       <div className={`min-h-screen transition-[margin] ${collapsed ? 'ml-[76px]' : 'ml-[248px]'}`}>
