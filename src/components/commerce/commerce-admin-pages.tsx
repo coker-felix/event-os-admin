@@ -226,7 +226,7 @@ export function CommerceSettingsPage() {
 
 export function CommerceTaxExemptionsPage() {
   const { session } = useAuth(); const client = useQueryClient()
-  const organizationsQuery = useQuery({ queryKey: keys.organizations, queryFn: () => listAdminOrganizations(session!.token), enabled: Boolean(session?.token) })
+  const organizationsQuery = useQuery({ queryKey: [...keys.organizations, 'organize'], queryFn: () => listAdminOrganizations(session!.token, 'organize'), enabled: Boolean(session?.token) })
   const organizations = organizationsQuery.data?.organizations ?? []
   const [selectedId, setSelectedId] = useState('')
   const organizationId = selectedId || organizations[0]?.id || ''

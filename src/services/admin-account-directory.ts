@@ -254,6 +254,13 @@ export async function listAdminOrganizations(token: string, capability?: 'organi
   return { organizations: normalizeRows(rows) }
 }
 
+export async function listAdminOrganizationsByCapabilities(token: string, capabilities: Array<'organize' | 'vend' | 'host'>) {
+  const responses = await Promise.all(capabilities.map((capability) => listAdminOrganizations(token, capability)))
+  const organizations = new Map<string, AdminOrganization>()
+  for (const response of responses) for (const organization of response.organizations) organizations.set(organization.id, organization)
+  return { organizations: [...organizations.values()] }
+}
+
 export function createAdminOrganization(token: string, input: CreateAdminOrganizationInput) {
   const { idempotencyKey, ...body } = input
   return request<{ organization?: AdminOrganization | null } & Partial<AdminOrganization>>(token, '/api/admin/organizations', {

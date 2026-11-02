@@ -148,15 +148,11 @@ function Identity({ name, secondary }: { name: string; secondary?: string }) {
   );
 }
 
-function OrganizationTypeBadge({ type }: { type?: string | null }) {
-  const label = type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unknown";
-  if (type === "organizer")
-    return <Badge className="bg-brand-soft text-brand">{label}</Badge>;
-  if (type === "vendor")
-    return <Badge className="bg-success-soft text-success">{label}</Badge>;
-  if (type === "venue")
-    return <Badge className="bg-warning-soft text-warning">{label}</Badge>;
-  return <Badge variant="outline">{label}</Badge>;
+function OrganizationCapabilitiesBadges({ capabilities }: { capabilities?: AdminOrganization["capabilities"] }) {
+  const entries = (capabilities ?? []).filter((item): item is NonNullable<typeof item> => Boolean(item))
+  if (entries.length === 0) return <Badge variant="outline">No capabilities</Badge>
+  const labels = { organize: "Organizer", vend: "Vendor", host: "Venue host" }
+  return <div className="flex flex-wrap gap-1">{entries.map((item) => <Badge key={item.capability} variant="outline" className={item.status === "active" ? "border-success/30 bg-success-soft text-success" : "border-line bg-surface-muted text-ink-muted"}>{labels[item.capability]} · {item.status || "pending"}</Badge>)}</div>
 }
 
 function ExistingAccountPicker({
@@ -1992,7 +1988,7 @@ export function AccountsOrganizationsPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <OrganizationTypeBadge type={(organization.capabilities ?? []).map((capability) => capability?.capability).filter(Boolean).join(", ")} />
+                    <OrganizationCapabilitiesBadges capabilities={organization.capabilities} />
                   </TableCell>
                   <TableCell>
                     <Identity
@@ -2177,7 +2173,7 @@ export function OrganizationDetailsPage({
                 <p className="mt-1 break-all font-mono text-xs text-ink-muted">{organization.id}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <OrganizationTypeBadge type={(organization.capabilities ?? []).map((capability) => capability?.capability).filter(Boolean).join(", ")} />
+                <OrganizationCapabilitiesBadges capabilities={organization.capabilities} />
                 {organization.status === "active" ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{organization.status || "Unknown"}</Badge>}
                 {organization.kycStatus === "approved" ? <Badge className="bg-success-soft text-success">KYC approved</Badge> : organization.kycStatus === "pending" ? <Badge className="bg-warning-soft text-warning">KYC pending</Badge> : <Badge variant="outline">KYC {organization.kycStatus || "unknown"}</Badge>}
               </div>
@@ -2218,9 +2214,9 @@ export function OrganizationDetailsPage({
                 </dd>
                 <dt className="text-ink-muted">Slug</dt>
                 <dd>{organization.slug || "—"}</dd>
-                <dt className="text-ink-muted">Type</dt>
+                <dt className="text-ink-muted">Capabilities</dt>
                 <dd>
-                  <OrganizationTypeBadge type={(organization.capabilities ?? []).map((capability) => capability?.capability).filter(Boolean).join(", ")} />
+                  <OrganizationCapabilitiesBadges capabilities={organization.capabilities} />
                 </dd>
                 <dt className="text-ink-muted">Status</dt>
                 <dd>
@@ -2427,8 +2423,8 @@ export function AccountsOrganizationUsersPage() {
   const { session } = useAuth();
   const [lookupId, setLookupId] = useState("");
   const organizationsQuery = useQuery({
-    queryKey: ["qk-admin-organizations"],
-    queryFn: () => listAdminOrganizations(session!.token),
+    queryKey: ["qk-admin-organizations", "organize"],
+    queryFn: () => listAdminOrganizations(session!.token, "organize"),
     enabled: Boolean(session?.token),
   });
   const membersQuery = useQuery({

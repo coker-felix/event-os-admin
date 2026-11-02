@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { formatDate } from '@/lib/date-format'
-import { listAdminOrganizations } from '@/services/admin-account-directory'
+import { listAdminOrganizationsByCapabilities } from '@/services/admin-account-directory'
 import { getAdminContract, listAdminContracts, type AdminContract } from '@/services/admin-documents'
 
 const PAGE_SIZE = 25
@@ -28,8 +28,8 @@ export function ContractsPage() {
   const [selectedId, setSelectedId] = useState('')
   const [pageTokens, setPageTokens] = useState<string[]>([''])
   const organizationsQuery = useQuery({
-    queryKey: ['qk-admin-organizations'],
-    queryFn: () => listAdminOrganizations(session!.token),
+    queryKey: ['qk-admin-organizations', 'capabilities', 'vend', 'host'],
+    queryFn: () => listAdminOrganizationsByCapabilities(session!.token, ['vend', 'host']),
     enabled: Boolean(session?.token),
   })
   const organizations = (organizationsQuery.data?.organizations ?? []).filter((organization) => Boolean(organization?.id))
