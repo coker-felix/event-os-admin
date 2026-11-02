@@ -10,6 +10,8 @@ test('uploads organization KYB evidence, waits for a clean scan, then submits wi
   let uploadRequest: Record<string, unknown> | undefined
   let submission: Record<string, unknown> | undefined
   let submissionKey = ''
+  const submissionKeys: string[] = []
+  let submissionAttempts = 0
   await page.route('**/api/admin/**', async (route) => route.fulfill({ status: 200, headers: corsHeaders, contentType: 'application/json', body: '{}' }))
   await page.route('**/api/admin/login', async (route) => route.fulfill({ status: 200, headers: corsHeaders, contentType: 'application/json', body: JSON.stringify({ token: 'admin-test-token' }) }))
   await page.route(`**/api/admin/organizations/${organizationId}`, async (route) => route.fulfill({ status: 200, headers: corsHeaders, contentType: 'application/json', body: JSON.stringify({ id: organizationId, name: 'Taylor Events', ownerId: 'c0a80101-0000-4000-8000-000000000001', capabilities: [{ capability: 'vend', status: 'pending', kybStatus: 'pending' }] }) }))
@@ -23,6 +25,9 @@ test('uploads organization KYB evidence, waits for a clean scan, then submits wi
   await page.route(`**/api/admin/organizations/${organizationId}/capabilities/vend/kyb`, async (route) => {
     submission = route.request().postDataJSON()
     submissionKey = route.request().headers()['idempotency-key'] || ''
+    submissionKeys.push(submissionKey)
+    submissionAttempts += 1
+    if (submissionAttempts === 1) return route.fulfill({ status: 503, headers: corsHeaders, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary KYB failure' }) })
     await route.fulfill({ status: 200, headers: corsHeaders, contentType: 'application/json', body: JSON.stringify({ orgId: organizationId, capability: 'vend', status: 'under_review' }) })
   })
 
@@ -34,6 +39,8 @@ test('uploads organization KYB evidence, waits for a clean scan, then submits wi
   await page.getByRole('button', { name: 'Upload evidence' }).click()
   await expect(page.getByText('Scan: clean')).toBeVisible()
   await page.getByRole('button', { name: 'Submit 1 clean document' }).click()
+  await expect(page.getByRole('alert')).toContainText('Temporary KYB failure')
+  await page.getByRole('button', { name: 'Submit 1 clean document' }).click()
   await expect(page.getByRole('status')).toContainText('KYB submitted')
 
   expect(uploadRequest).toMatchObject({ capability: 'vend', kind: 'business_registration', contentType: 'application/pdf', sizeBytes: 13 })
@@ -41,4 +48,7 @@ test('uploads organization KYB evidence, waits for a clean scan, then submits wi
   expect(submission).toMatchObject({ documents: [{ kind: 'business_registration', artifactId }] })
   expect(submission?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i)
   expect(submissionKey).toBe(submission?.idempotencyKey)
+  expect(submissionKeys).toHaveLength(2)
+  expect(submissionKeys[0]).toMatch(/^[0-9a-f-]{36}$/i)
+  expect(submissionKeys[0]).toBe(submissionKeys[1])
 })
