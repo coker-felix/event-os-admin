@@ -2539,18 +2539,45 @@ paths:
       tags: [Vendors & Venues]
       operationId: HandleAdminGetVendor
       summary: Get a vendor profile
-      description: Requires `admin.users.read`.
+      description: Requires `admin.users.read`. Set `managingOrgId` to scope the lookup to an organization-owned profile.
       parameters:
-        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: query, name: managingOrgId, required: false, schema: { type: string, format: uuid } }
       responses:
-        "200":
-          description: Vendor profile.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Vendor" }
+        "200": { description: Vendor profile and server-derived stats, content: { application/json: { schema: { $ref: "#/components/schemas/Vendor" } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
+    patch:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminUpdateManagedVendor
+      summary: Update an organization vendor profile
+      description: Requires `admin.users.manage`, an active, KYB-approved `vend` capability, and matching profile ownership. Ownership, status, tier, and derived stats cannot be changed here.
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [managingOrgId, businessName]
+              properties:
+                managingOrgId: { type: string, format: uuid }
+                businessName: { type: string }
+                contactName: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                category: { type: string }
+                city: { type: string }
+                country: { type: string }
+                description: { type: string }
+      responses:
+        "200": { description: Updated profile, content: { application/json: { schema: { $ref: "#/components/schemas/Vendor" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /api/admin/organizations/{orgId}/vendor-profiles/{vendorId}/service-areas:
     get:
       tags: [Vendors & Venues]
@@ -2577,11 +2604,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [serviceAreas]
-              properties:
-                serviceAreas: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/VendorServiceAreaInput" } }
+            schema: { type: object, required: [serviceAreas], properties: { serviceAreas: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/VendorServiceAreaInput" } } } }
       responses:
         "200": { description: Replacement service areas, content: { application/json: { schema: { $ref: "#/components/schemas/VendorServiceAreas" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -2612,7 +2635,9 @@ paths:
               type: object
               required: [status]
               properties:
-                status: { type: string, enum: [pending_approval, active, suspended] }
+                status: { type: string, enum: [pending_approval, active, suspended, deactivated] }
+                managingOrgId: { type: string, format: uuid, description: Required for organization-managed profile status changes. }
+                reason: { type: string, description: Required when deactivating an organization-managed profile. }
       responses:
         "200":
           description: Updated vendor.
@@ -4847,6 +4872,18 @@ components:
         ratingCount: { type: integer, format: int64 }
         averageRating: { type: number, format: double }
         completedBookingCount: { type: integer, format: int64 }
+    ManagedVendorInput:
+      type: object
+      required: [businessName]
+      properties:
+        businessName: { type: string }
+        contactName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        category: { type: string }
+        city: { type: string }
+        country: { type: string }
+        description: { type: string }
     VendorServiceAreaInput:
       type: object
       required: [countryCode]

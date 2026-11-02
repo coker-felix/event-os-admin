@@ -95,7 +95,7 @@ export function setOrganizationCapabilityStatus(token: string, orgId: string, ca
 
 export interface OrganizationVendorProfile {
   id: string; accountId: string; businessName: string; contactName?: string; email?: string; phone?: string;
-  status: string; tier: string; category?: string; city?: string; country?: string;
+  status: string; tier: string; category?: string; city?: string; country?: string; description?: string;
   profileStats?: { ratingCount: number; averageRating: number; completedBookingCount: number } | null
 }
 export interface OrganizationVendorServiceArea { id: string; vendorId: string; countryCode: string; regionCode?: string; locality?: string }
@@ -105,8 +105,17 @@ export async function listOrganizationVendorProfiles(token: string, orgId: strin
   return { vendors: Array.isArray(payload.vendors) ? payload.vendors.filter((vendor): vendor is OrganizationVendorProfile => Boolean(vendor?.id)) : [] }
 }
 
-export function createOrganizationVendorProfile(token: string, orgId: string, input: { accountId: string; businessName: string; email?: string; phone?: string; category?: string; city?: string; country?: string }) {
+export function createOrganizationVendorProfile(token: string, orgId: string, input: { accountId: string; businessName: string; contactName?: string; email?: string; phone?: string; category?: string; city?: string; country?: string }) {
   return request<OrganizationVendorProfile>(token, '/api/admin/vendors', { method: 'POST', body: JSON.stringify({ ...input, managingOrgId: orgId }) })
+}
+export function getOrganizationVendorProfile(token: string, orgId: string, vendorId: string) {
+  return request<OrganizationVendorProfile>(token, `/api/admin/vendors/${encodeURIComponent(vendorId)}?managingOrgId=${encodeURIComponent(orgId)}`)
+}
+export function updateOrganizationVendorProfile(token: string, orgId: string, vendorId: string, input: { businessName: string; contactName?: string; email?: string; phone?: string; category?: string; city?: string; country?: string; description?: string }) {
+  return request<OrganizationVendorProfile>(token, `/api/admin/vendors/${encodeURIComponent(vendorId)}`, { method: 'PATCH', body: JSON.stringify({ ...input, managingOrgId: orgId }) })
+}
+export function deactivateOrganizationVendorProfile(token: string, orgId: string, vendorId: string, reason: string) {
+  return request<OrganizationVendorProfile>(token, `/api/admin/vendors/${encodeURIComponent(vendorId)}/status`, { method: 'PATCH', body: JSON.stringify({ managingOrgId: orgId, status: 'deactivated', reason }) })
 }
 
 export async function listOrganizationVendorServiceAreas(token: string, orgId: string, vendorId: string) {
