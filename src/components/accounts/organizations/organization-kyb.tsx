@@ -96,7 +96,7 @@ export function OrganizationKYB({ organizationId, capabilities }: { organization
       </div>}
       {selected && (selected.kybStatus === 'approved' && selected.status !== 'active' || selected.status === 'active') && <div className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_auto]">
         <label className="space-y-1.5 text-sm font-medium">{selected.status === 'active' ? 'Suspension reason' : 'Activation reason'}<Input value={statusReason} onChange={(event) => setStatusReason(event.target.value)} required /></label>
-        <div className="flex items-end"><Button type="button" disabled={!statusReason.trim() || statusMutation.isPending} onClick={() => statusMutation.mutate(selected.status === 'active' ? 'suspended' : 'active')}>{statusMutation.isPending ? 'Saving…' : selected.status === 'active' ? 'Suspend capability' : 'Activate capability'}</Button></div>
+        <div className="flex items-end"><Button type="button" disabled={!statusReason.trim() || statusMutation.isPending} onClick={() => { const next = selected.status === 'active' ? 'suspended' : 'active'; if (window.confirm(`${next === 'suspended' ? 'Suspend' : 'Activate'} the ${capability} capability?`)) statusMutation.mutate(next) }}>{statusMutation.isPending ? 'Saving…' : selected.status === 'active' ? 'Suspend capability' : 'Activate capability'}</Button></div>
         {statusMutation.isError && <p role="alert" className="text-sm text-danger sm:col-span-2">{statusMutation.error.message}</p>}
       </div>}
     </CardContent>

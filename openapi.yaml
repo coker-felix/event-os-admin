@@ -468,6 +468,80 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{id}:
+    get:
+      operationId: HandleAdminGetOrganization
+      tags: [Organizations]
+      summary: Get an organization and its capabilities
+      description: Requires `admin.users.read`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Organization details, content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: HandleAdminUpdateOrganization
+      tags: [Organizations]
+      summary: Update organization contact and address fields
+      description: Requires `admin.users.manage`; changes are audited with the actor and reason.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, reason]
+              properties:
+                name: { type: string, minLength: 1 }
+                email: { type: string, format: email }
+                phone: { type: string }
+                address: { type: string }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200": { description: Updated organization, content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/organizations/{id}/status:
+    patch:
+      operationId: HandleAdminSetOrganizationStatus
+      tags: [Organizations]
+      summary: Suspend or reactivate an organization
+      description: Requires `admin.users.manage`; the actor, previous status, next status, and reason are audited.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200": { description: Updated organization, content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/organizations/{id}/permissions:
+    get:
+      operationId: HandleAdminResolveOrganizationPermissions
+      tags: [Organizations]
+      summary: Resolve a member's effective permissions in one organization scope
+      description: Requires `admin.users.read`; Identity derives the result from current organization, capability, membership, and role state.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: actorId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: scope, in: query, required: true, schema: { type: string, enum: [organizer, vendor, venue] } }
+      responses:
+        "200": { description: Effective scoped permissions, content: { application/json: { schema: { type: object, properties: { scope: { type: string }, roleId: { type: string }, roleName: { type: string }, permissions: { type: array, items: { type: string } }, orgStatus: { type: string }, capabilities: { type: array, items: { type: object } } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/admin/organizations/{id}/capabilities/{capability}/status:
     patch:
       operationId: HandleAdminSetOrganizationCapabilityStatus
@@ -4512,6 +4586,25 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    Organization:
+      type: object
+      required: [id, name, ownerId, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        ownerId: { type: string, format: uuid }
+        email: { type: string }
+        phone: { type: string }
+        address: { type: string }
+        status: { type: string, enum: [active, suspended] }
+        capabilities:
+          type: array
+          items:
+            type: object
+            properties:
+              capability: { type: string, enum: [organize, vend, host] }
+              status: { type: string }
+              kybStatus: { type: string }
     OrganizationCalloutInput:
       type: object
       required: [category, serviceKinds, opensAt, closesAt]

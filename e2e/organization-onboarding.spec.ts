@@ -63,7 +63,7 @@ test('creates a user then creates a capability-based organization with a replay 
   await expect(page).toHaveURL(/\/app\/accounts\/organizations\/c0a80101-0000-4000-8000-000000000002$/)
   await expect(page.getByText('organize', { exact: true })).toBeVisible()
   await page.getByLabel('Add capability').selectOption('host')
-  await page.getByLabel('Reason').fill('Venue operations capability')
+  await page.getByLabel('Reason', { exact: true }).fill('Venue operations capability')
   await page.getByRole('button', { name: 'Add' }).click()
   await expect(page.getByRole('alert')).toContainText('Temporary capability failure')
   await page.getByRole('button', { name: 'Add' }).click()

@@ -84,3 +84,11 @@ Each rule below was decided once and is cheap to violate by accident. Follow the
 - When a design calls for a pill style segmented control (such as product setup section tabs or a dashboard period toggle), use `.ica-segmented-pill` once defined. The selected option is a white pill on a grey track, distinguished by shadow and font weight rather than violet.
 - Mark a table row with open detail using `[class.ica-row-selected]`: a violet tint and a violet edge on the first cell, not a grey hover color.
 - The active top tab sets `aria-current="page"`. Keep the visual active state and the accessible state in sync.
+
+## Organization administration
+
+- Treat an organization as one business principal with zero or more capabilities (`organize`, `vend`, `host`); never infer an organization type from its name or display label.
+- Membership roles and invitations are scoped to the capability scope. Include that scope in requests and query keys, and protect the owner from role changes, suspension, or removal.
+- Organization-owned vendor profiles, service areas, and venues are edited only through organization-scoped APIs. Allow multiple vendor profiles per organization. Display derived profile statistics as read-only values.
+- KYB submissions reference Documents artifact IDs and may be submitted only after the evidence scan is clean. Do not store or send raw upload URLs as evidence references.
+- State-changing organization and capability operations require a reason, confirmation for suspension, visible pending/error states, and invalidation of organization and related resource queries after success.

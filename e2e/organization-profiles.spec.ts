@@ -41,6 +41,7 @@ test('manages sibling organization profiles and profile-scoped regional areas wi
   await page.addInitScript(() => sessionStorage.setItem('event-os-admin-session', JSON.stringify({ token: 'admin-test-token', tokenType: 'Bearer' })))
   await page.goto(`/app/accounts/organizations/${orgId}`)
   await expect(page.getByText('Vendor profiles', { exact: true })).toBeVisible()
+  await expect(page.getByText('No organization-managed venues yet.')).toBeVisible()
   await page.getByRole('button', { name: /Accra Catering/ }).click()
   await expect(page.getByText('4.5 rating · 4 reviews · 7 completed bookings')).toBeVisible()
   await page.getByRole('button', { name: 'Create another profile' }).click()

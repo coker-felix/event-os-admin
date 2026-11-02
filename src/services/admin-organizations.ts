@@ -17,6 +17,28 @@ export function getAdminOrganization(token: string, id: string) {
 	return request<AdminOrganization>(token, `/api/admin/organizations/${encodeURIComponent(id)}`).then((organization) => ({ organization }))
 }
 
+export interface OrganizationMemberPermissions {
+  actorId?: string
+  orgId?: string
+  scope?: string
+  roleId?: string
+  roleName?: string
+  permissions?: string[]
+  orgStatus?: string
+}
+
+export function getOrganizationMemberPermissions(token: string, orgId: string, actorId: string, scope: string) {
+  return request<OrganizationMemberPermissions>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/permissions?actorId=${encodeURIComponent(actorId)}&scope=${encodeURIComponent(scope)}`)
+}
+
+export function updateAdminOrganization(token: string, orgId: string, input: { name: string; email: string; phone: string; address: string; reason: string }) {
+  return request<AdminOrganization>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+
+export function setAdminOrganizationStatus(token: string, orgId: string, status: 'active' | 'suspended', reason: string) {
+  return request<AdminOrganization>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/status`, { method: 'PATCH', body: JSON.stringify({ status, reason }) })
+}
+
 export interface AdminOrganizationInvite {
   id: string
   orgId?: string | null

@@ -6,6 +6,7 @@ import { addOrganizationCapability, getAdminOrganization } from '@/services/admi
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { OrganizationOverview } from '@/components/accounts/organizations/organization-overview'
 import { OrganizationMembers } from '@/components/accounts/organizations/organization-members'
 import { OrganizationKYB } from '@/components/accounts/organizations/organization-kyb'
 import { OrganizationVendorProfiles } from '@/components/accounts/organizations/organization-vendor-profiles'
@@ -29,6 +30,7 @@ function OrganizationDetailPage() {
   return <section className="mx-auto max-w-4xl space-y-6">
     <header><h1 className="text-xl font-semibold tracking-tight">{org?.name || 'Organization'}</h1><p className="mt-1 break-all text-xs text-ink-muted">{orgId}</p></header>
     {query.isLoading ? <p className="py-8 text-center text-sm text-ink-muted">Loading organization…</p> : query.isError ? <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{query.error.message}</p> : org ? <>
+      <OrganizationOverview organization={org} />
       <Card><CardHeader><CardTitle>Capabilities and KYB</CardTitle></CardHeader><CardContent className="space-y-3">{(org.capabilities ?? []).map((item) => item && <div key={item.capability} className="flex items-center justify-between rounded-lg border border-line p-3 text-sm"><span>{item.capability}</span><span className="text-ink-muted">{item.status || 'pending'} · KYB {item.kybStatus || 'pending'}</span></div>)}{availableCapabilities.length > 0 && <form className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_1fr_auto]" onSubmit={submitCapability}><label className="space-y-1.5 text-sm font-medium">Add capability<select aria-label="Add capability" value={capability} onChange={(event) => { const next = event.target.value as typeof capability; setCapability(next); setIdempotencyKey('') }} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm">{availableCapabilities.map((value) => <option key={value}>{value}</option>)}</select></label><label className="space-y-1.5 text-sm font-medium">Reason<Input required value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="flex items-end"><Button type="submit" disabled={addCapability.isPending || !reason.trim()}>{addCapability.isPending ? 'Adding…' : 'Add'}</Button></div>{addCapability.isError && <p role="alert" className="text-sm text-danger sm:col-span-3">{addCapability.error.message} Retry with the same key to replay safely.</p>}</form>}</CardContent></Card>
       <OrganizationKYB organizationId={orgId} capabilities={org.capabilities ?? []} />
       <OrganizationMembers organizationId={orgId} ownerId={org.ownerId} capabilities={org.capabilities ?? []} />

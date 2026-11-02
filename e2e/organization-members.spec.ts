@@ -17,6 +17,7 @@ test('manages memberships and invitations independently for each capability scop
     vendor: [{ id: vendorMemberId, userId: vendorMemberId, name: 'Vendor Manager', roleId: 'vendor_manager', status: 'active' }],
   }
   const invites: Record<string, Array<Record<string, unknown>>> = { organizer: [], vendor: [] }
+  const permissionQueries: Array<{ scope: string | null; actorId: string | null }> = []
   let inviteBody: Record<string, unknown> | undefined
   let roleChange: Record<string, unknown> | undefined
   let statusChange: Record<string, unknown> | undefined
@@ -31,6 +32,12 @@ test('manages memberships and invitations independently for each capability scop
       ? [{ id: 'role-vendor-owner', code: 'vendor_owner', name: 'Vendor owner' }, { id: 'role-vendor-manager', code: 'vendor_manager', name: 'Vendor manager' }, { id: 'role-vendor-assistant', code: 'vendor_assistant', name: 'Vendor assistant' }]
       : [{ id: 'role-organizer-owner', code: 'organizer_owner', name: 'Organizer owner' }, { id: 'role-organizer-editor', code: 'organizer_editor', name: 'Event editor' }]
     await route.fulfill({ status: 200, headers: corsHeaders, contentType: 'application/json', body: JSON.stringify({ roles }) })
+  })
+  await page.route(`**/api/admin/organizations/${orgId}/permissions**`, async (route) => {
+    const url = new URL(route.request().url())
+    const scope = url.searchParams.get('scope')
+    permissionQueries.push({ scope, actorId: url.searchParams.get('actorId') })
+    await route.fulfill({ status: 200, headers: corsHeaders, contentType: 'application/json', body: JSON.stringify({ scope, roleId: `${scope}_manager`, roleName: `${scope} manager`, orgStatus: 'active', permissions: [`${scope}.events.read`] }) })
   })
   await page.route(`**/api/admin/organizations/${orgId}/invites**`, async (route) => {
     const request = route.request()
@@ -89,11 +96,15 @@ test('manages memberships and invitations independently for each capability scop
   await page.goto(`/app/accounts/organizations/${orgId}`)
   await expect(page.getByText('Members · organizer')).toBeVisible()
   await expect(page.getByText('Org Owner · Owner')).toBeVisible()
+  await expect(page.getByText('organizer.events.read', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Role for Org Owner')).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Suspend', exact: true })).toHaveCount(1)
   await page.getByLabel('Membership scope').selectOption('vendor')
   await expect(page.getByText('Members · vendor')).toBeVisible()
-  await expect(page.getByText('Vendor Manager', { exact: true })).toBeVisible()
+  await expect(page.getByText('vendor.events.read', { exact: true })).toBeVisible()
+  expect(permissionQueries).toContainEqual({ scope: 'organizer', actorId: ownerId })
+  expect(permissionQueries).toContainEqual({ scope: 'vendor', actorId: vendorMemberId })
+  await expect(page.getByLabel('Permission member')).toHaveValue(vendorMemberId)
   await page.getByLabel('Role for Vendor Manager').selectOption('vendor_assistant')
   await expect.poll(() => roleChange).toMatchObject({ roleId: 'vendor_assistant', scope: 'vendor' })
   await page.getByRole('button', { name: 'Suspend', exact: true }).click()
