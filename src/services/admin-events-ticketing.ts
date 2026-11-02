@@ -61,6 +61,30 @@ export interface AdminOrder {
   lines?: Array<Record<string, unknown> | null> | null
 }
 
+export interface AdminVendorCallout {
+  id: string
+  eventId?: string | null
+  orgId?: string | null
+  organization?: { id?: string | null; name?: string | null } | null
+  event?: { id?: string | null; title?: string | null } | null
+  organizationName?: string | null
+  eventTitle?: string | null
+  category?: string | null
+  serviceKinds?: Array<string | null> | null
+  opensAt?: UnixSeconds | null
+  closesAt?: UnixSeconds | null
+  status?: 'open' | 'closed' | 'cancelled' | string | null
+}
+
+export interface AdminVendorCalloutFilters {
+  status?: string
+  category?: string
+  orgId?: string
+  eventId?: string
+  limit?: number
+  offset?: number
+}
+
 export interface AdminEventInput {
   title: string
   description?: string
@@ -206,6 +230,33 @@ export async function listAdminEvents(token: string, filters: { orgId?: string; 
   if (filters.status) query.set('status', filters.status)
   const response = await request<{ events?: Array<AdminEvent | null> | null }>(token, `/api/admin/events${query.size ? `?${query}` : ''}`)
   return { events: Array.isArray(response?.events) ? response.events.filter((event): event is AdminEvent => Boolean(event && event.id)) : [] }
+}
+
+export async function listAdminVendorCallouts(token: string, filters: AdminVendorCalloutFilters = {}) {
+  const query = new URLSearchParams()
+  for (const key of ['status', 'category', 'orgId', 'eventId'] as const) {
+    const value = filters[key]?.trim()
+    if (value) query.set(key, value)
+  }
+  query.set('limit', String(filters.limit ?? 25))
+  query.set('offset', String(filters.offset ?? 0))
+  const response = await request<{ callouts?: Array<AdminVendorCallout | null> | null; total?: number | null }>(token, `/api/admin/vendor-callouts?${query}`)
+  return {
+    callouts: Array.isArray(response?.callouts) ? response.callouts.filter((callout): callout is AdminVendorCallout => Boolean(callout && callout.id)) : [],
+    total: typeof response?.total === 'number' && Number.isFinite(response.total) && response.total >= 0 ? response.total : 0,
+  }
+}
+
+export function getAdminVendorCallout(token: string, calloutId: string) {
+  return request<AdminVendorCallout>(token, `/api/admin/vendor-callouts/${encodeURIComponent(calloutId)}`)
+}
+
+export function closeAdminVendorCallout(token: string, calloutId: string) {
+  return request<AdminVendorCallout>(token, `/api/admin/vendor-callouts/${encodeURIComponent(calloutId)}/close`, { method: 'POST' })
+}
+
+export function cancelAdminVendorCallout(token: string, calloutId: string) {
+  return request<AdminVendorCallout>(token, `/api/admin/vendor-callouts/${encodeURIComponent(calloutId)}/cancel`, { method: 'POST' })
 }
 
 export function getAdminEvent(token: string, eventId: string) {

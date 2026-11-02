@@ -128,6 +128,7 @@ const navigation: readonly AdminNavigationModule[] = [
   { id: 'events', label: 'Events', icon: '◷', items: [
     { label: 'Overview', to: '/app/events/overview' },
     { label: 'Manage events', to: '/app/events' },
+    { label: 'Vendor callouts', to: '/app/events/vendor-callouts' },
     { label: 'Create event', to: '/app/events/create' },
   ] },
   { id: 'ticketing', label: 'Ticketing', icon: '▣', items: [
@@ -249,7 +250,7 @@ export function RootLayout() {
             {navigation.map((group) => {
               const GroupIcon = moduleIcons[group.id]
               const organizationDetailActive = group.id === 'accounts' && pathname.startsWith('/app/organizations/')
-              const eventDetailActive = group.id === 'events' && /^\/app\/events\/[^/]+$/.test(pathname) && pathname !== '/app/events/create' && pathname !== '/app/events/overview'
+              const eventDetailActive = group.id === 'events' && /^\/app\/events\/[^/]+\/view\/?$/.test(pathname)
               const groupActive = organizationDetailActive || eventDetailActive || group.items.some((item) => pathname === item.to || pathname.startsWith(`${item.to}/`))
               const isExpanded = expanded[group.id] ?? groupActive
 

@@ -1587,15 +1587,18 @@ paths:
     get:
       tags: [Events]
       operationId: HandleAdminListVendorCallouts
-      summary: List open vendor callouts
-      description: Requires `admin.events.read`. Returns callouts accepting vendor applications, with optional category filtering and offset pagination.
+      summary: List vendor callouts
+      description: Requires `admin.events.read`. Returns vendor callouts across all statuses, with optional status, category, organization, and event filters and offset pagination.
       parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, closed, cancelled] } }
         - { name: category, in: query, schema: { type: string } }
+        - { name: orgId, in: query, schema: { type: string } }
+        - { name: eventId, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
         - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
         "200":
-          description: Open callout page and total count.
+          description: Callout page and total count.
           content:
             application/json:
               schema:
@@ -1606,6 +1609,62 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-callouts/{calloutId}:
+    parameters:
+      - { name: calloutId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Events]
+      operationId: HandleAdminGetVendorCallout
+      summary: Get vendor callout details
+      description: Requires `admin.events.read`.
+      responses:
+        "200":
+          description: Vendor callout details.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminVendorCallout" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-callouts/{calloutId}/close:
+    post:
+      tags: [Events]
+      operationId: HandleAdminCloseVendorCallout
+      summary: Close an open vendor callout
+      description: Requires `admin.events.manage`. Only open callouts can be closed.
+      parameters:
+        - { name: calloutId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Closed vendor callout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminVendorCallout" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/vendor-callouts/{calloutId}/cancel:
+    post:
+      tags: [Events]
+      operationId: HandleAdminCancelVendorCallout
+      summary: Cancel a vendor callout
+      description: Requires `admin.events.manage`. Open or closed callouts can be cancelled. Cancelled callouts are terminal.
+      parameters:
+        - { name: calloutId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Cancelled vendor callout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminVendorCallout" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "500": { $ref: "#/components/responses/ServerError" }
   /api/admin/organizations/{orgId}/events:
     post:
@@ -4109,6 +4168,18 @@ components:
         id: { type: string }
         eventId: { type: string }
         orgId: { type: string }
+        organization:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+        organizationName: { type: string }
+        event:
+          type: object
+          properties:
+            id: { type: string }
+            title: { type: string }
+        eventTitle: { type: string }
         category: { type: string }
         serviceKinds: { type: array, items: { type: string } }
         opensAt: { type: integer, format: int64, description: Unix seconds. }

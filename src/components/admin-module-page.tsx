@@ -1,6 +1,7 @@
 import { useLocation, useParams } from '@tanstack/react-router'
 import { AccountsOrganizationUsersPage, AccountsOrganizationsPage, AccountsVenueOrganizationsPage, AccountsVendorsPage, AccountsVenuesPage, MarketplaceReconciliationPage, OrganizationDetailsPage } from '@/components/accounts/accounts-directory-pages'
 import { AdminEventsPage } from '@/components/events/admin-events-page'
+import { VendorCalloutsPage } from '@/components/events/vendor-callouts-page'
 import { ContractsPage } from '@/components/contracts/contracts-page'
 import { InvoicesPage } from '@/components/invoices/invoices-page'
 import { CommerceFeeRulesPage, CommercePayoutsPage, CommerceSettingsPage, CommerceTaxExemptionsPage, CommerceTaxRulesPage } from '@/components/commerce/commerce-admin-pages'
@@ -80,6 +81,7 @@ export function AdminModulePage() {
   if (module === 'marketplace' && section === 'reconciliation') return <MarketplaceReconciliationPage />
   if (module === 'events' && !section) return <AdminEventsPage />
   if (module === 'events' && section === 'directory') return <AdminEventsPage />
+  if (module === 'events' && section === 'vendor-callouts') return <VendorCalloutsPage />
   if (module === 'ticketing' && section === 'verify') return <TicketVerificationPage />
   if ((module === 'documents' || module === 'contracts') && section === 'contracts') return <ContractsPage />
   if (module === 'invoices' && section === 'list') return <InvoicesPage />

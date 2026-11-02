@@ -1,6 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { EventDetailsPage } from '@/components/events/events-page'
+import { createFileRoute, Navigate, useParams } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/app/_dashboard/events/$eventId/')({
-  component: EventDetailsPage,
+  component: () => {
+    const { eventId } = useParams({ strict: false })
+    return <Navigate to="/app/events/$eventId/view" params={{ eventId: eventId ?? '' }} />
+  },
 })
