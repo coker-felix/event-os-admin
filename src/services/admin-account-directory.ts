@@ -57,7 +57,7 @@ export interface AdminOrganization {
   id: string
   name?: string | null
   slug?: string | null
-  type?: 'organizer' | 'vendor' | 'venue' | null
+  capabilities?: Array<{ capability: 'organize' | 'vend' | 'host'; status?: string | null; kybStatus?: string | null } | null> | null
   ownerId?: string | null
   email?: string | null
   phone?: string | null
@@ -68,9 +68,13 @@ export interface AdminOrganization {
 }
 
 export interface CreateAdminOrganizationInput {
-  owner_id: string
+  ownerId: string
   name: string
-  type: 'organizer' | 'vendor' | 'venue'
+  capabilities: Array<'organize' | 'vend' | 'host'>
+  email?: string
+  phone?: string
+  address?: string
+  idempotencyKey: string
 }
 
 export interface CreateAdminVendorInput {
@@ -96,6 +100,7 @@ export interface OrganizationMember {
   roleId?: string | null
   role?: string | null
   roleName?: string | null
+  scope?: 'organizer' | 'vendor' | 'venue' | null
   status?: string | null
 }
 
@@ -242,16 +247,17 @@ export function getOrganizationCommerceProfile(token: string, id: string) {
   return request<OrganizationCommerceProfile>(token, `/api/admin/organizations/${encodeURIComponent(id)}/commerce-profile`)
 }
 
-export async function listAdminOrganizations(token: string, type?: NonNullable<AdminOrganization['type']>) {
-  const query = type ? `?type=${encodeURIComponent(type)}` : ''
+export async function listAdminOrganizations(token: string, capability?: 'organize' | 'vend' | 'host') {
+  const query = capability ? `?capability=${encodeURIComponent(capability)}` : ''
   const response = await request<{ organizations?: Array<AdminOrganization | null> | null } | Array<AdminOrganization | null>>(token, `/api/admin/organizations${query}`)
   const rows = Array.isArray(response) ? response : response?.organizations
   return { organizations: normalizeRows(rows) }
 }
 
 export function createAdminOrganization(token: string, input: CreateAdminOrganizationInput) {
+  const { idempotencyKey, ...body } = input
   return request<{ organization?: AdminOrganization | null } & Partial<AdminOrganization>>(token, '/api/admin/organizations', {
-    method: 'POST', body: JSON.stringify(input),
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ ...body, idempotencyKey }),
   })
 }
 
@@ -261,8 +267,8 @@ export function createAdminVendor(token: string, input: CreateAdminVendorInput) 
   })
 }
 
-export async function listOrganizationMembers(token: string, id: string) {
-  const response = await request<{ members?: Array<OrganizationMember | null> | null } | Array<OrganizationMember | null>>(token, `/api/admin/organizations/${encodeURIComponent(id)}/members`)
+export async function listOrganizationMembers(token: string, id: string, scope: 'organizer' | 'vendor' | 'venue' = 'organizer') {
+  const response = await request<{ members?: Array<OrganizationMember | null> | null } | Array<OrganizationMember | null>>(token, `/api/admin/organizations/${encodeURIComponent(id)}/members?scope=${encodeURIComponent(scope)}`)
   const rows = Array.isArray(response) ? response : response?.members
   return { members: Array.isArray(rows) ? rows.filter((member): member is OrganizationMember => Boolean(member && typeof member === 'object')) : [] }
 }

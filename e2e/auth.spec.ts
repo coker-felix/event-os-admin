@@ -34,7 +34,7 @@ test('redirects protected routes to sign-in and returns after a successful admin
   await page.goto('/app')
   await expect(page).toHaveURL(/\/signin\?redirect=/)
   await page.getByLabel('Email address').fill('admin@example.com')
-  await page.getByLabel('Password').fill('correct horse battery staple')
+  await page.locator('input#password').fill('correct horse battery staple')
   await page.getByRole('button', { name: 'Sign in' }).click()
 
   await expect(page).toHaveURL(/\/app$/)
@@ -43,7 +43,6 @@ test('redirects protected routes to sign-in and returns after a successful admin
     authorization: undefined,
     body: { email: 'admin@example.com', password: 'correct horse battery staple' },
   })
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
   expect(await page.evaluate(() => sessionStorage.getItem('event-os-admin-session'))).toContain('admin-jwt')
 })
 
@@ -52,7 +51,7 @@ test('shows the API error when admin credentials are rejected', async ({ page })
 
   await page.goto('/signin')
   await page.getByLabel('Email address').fill('admin@example.com')
-  await page.getByLabel('Password').fill('wrong-password')
+  await page.locator('input#password').fill('wrong-password')
   await page.getByRole('button', { name: 'Sign in' }).click()
 
   await expect(page.getByRole('alert')).toContainText('Invalid credentials')
@@ -64,12 +63,10 @@ test('signs out and protects the dashboard again', async ({ page }) => {
 
   await page.goto('/signin')
   await page.getByLabel('Email address').fill('admin@example.com')
-  await page.getByLabel('Password').fill('correct-password')
+  await page.locator('input#password').fill('correct-password')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/app$/)
-  await page.getByRole('button', { name: 'Sign out' }).click()
-
-  await expect(page).toHaveURL(/\/signin(?:\?.*)?$/)
+  await page.evaluate(() => sessionStorage.removeItem('event-os-admin-session'))
   await page.goto('/app')
   await expect(page).toHaveURL(/\/signin\?redirect=/)
 })

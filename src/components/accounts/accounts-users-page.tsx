@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeSlash } from '@phosphor-icons/react'
 import { useAuth } from '@/contexts/auth'
@@ -68,7 +69,7 @@ function ConsumerDetails({ userId, onClose }: { userId: string | null; onClose: 
           {channelsQuery.isLoading ? <p className="text-sm text-ink-muted">Loading user channels…</p> : channelsQuery.isError ? <p role="alert" className="text-sm text-danger">{channelsQuery.error.message}</p> : channels.length ? <ul className="flex flex-wrap gap-2">{channels.map((channel) => <li key={channel.channel}><Badge variant="outline">{channel.channel}</Badge></li>)}</ul> : <p className="text-sm text-ink-muted">No channels recorded for this account.</p>}
         </CardContent></Card>
         <Card><CardHeader><CardTitle>Organizations owned</CardTitle></CardHeader><CardContent>
-          {organizationsQuery.isLoading ? <p className="text-sm text-ink-muted">Loading organizations…</p> : organizationsQuery.isError ? <p role="alert" className="text-sm text-danger">{organizationsQuery.error.message}</p> : organizations.length ? <ul className="divide-y divide-line">{organizations.map((organization) => <li key={organization.id} className="py-3 first:pt-0 last:pb-0"><p className="font-medium">{organization.name || organization.id}</p><p className="mt-1 text-xs text-ink-muted">{organization.type || 'Organization'} · {organization.status || 'Status unknown'}</p></li>)}</ul> : <p className="text-sm text-ink-muted">This account doesn’t own any organizations.</p>}
+          {organizationsQuery.isLoading ? <p className="text-sm text-ink-muted">Loading organizations…</p> : organizationsQuery.isError ? <p role="alert" className="text-sm text-danger">{organizationsQuery.error.message}</p> : organizations.length ? <ul className="divide-y divide-line">{organizations.map((organization) => <li key={organization.id} className="py-3 first:pt-0 last:pb-0"><p className="font-medium">{organization.name || organization.id}</p><p className="mt-1 text-xs text-ink-muted">{(organization.capabilities ?? []).map((capability) => capability?.capability).filter(Boolean).join(', ') || 'Organization'} · {organization.status || 'Status unknown'}</p></li>)}</ul> : <p className="text-sm text-ink-muted">This account doesn’t own any organizations.</p>}
           <p className="mt-3 text-xs text-ink-muted">The admin API doesn’t currently provide this user’s other organization memberships.</p>
         </CardContent></Card>
       </div>
@@ -84,16 +85,17 @@ function CreateUserSheet({ open, onOpenChange, onCreated }: { open: boolean; onO
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [idempotencyKey, setIdempotencyKey] = useState('')
   const mutation = useMutation({
-    mutationFn: () => createAdminConsumer(session!.token, {
+    mutationFn: (key: string) => createAdminConsumer(session!.token, {
       name: name.trim(),
       ...(email.trim() ? { email: email.trim() } : {}),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       ...(password ? { password } : {}),
-    }),
+    }, key),
     onSuccess: async ({ id }) => {
       await queryClient.invalidateQueries({ queryKey: usersQueryKey })
-      setName(''); setEmail(''); setPhone(''); setPassword(''); setShowPassword(false)
+      setName(''); setEmail(''); setPhone(''); setPassword(''); setShowPassword(false); setIdempotencyKey('')
       onOpenChange(false)
       onCreated(id)
     },
@@ -102,7 +104,7 @@ function CreateUserSheet({ open, onOpenChange, onCreated }: { open: boolean; onO
   return <Sheet open={open} onOpenChange={onOpenChange}>
     <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
       <SheetHeader><SheetTitle>Add consumer account</SheetTitle><SheetDescription>Provide an email address, phone number, or both to create a consumer profile.</SheetDescription></SheetHeader>
-      <form id="create-consumer-form" className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}>
+      <form id="create-consumer-form" className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={(event) => { event.preventDefault(); const key = idempotencyKey || crypto.randomUUID(); setIdempotencyKey(key); mutation.mutate(key) }}>
         <label className="block space-y-1.5 text-sm font-medium">Full name<Input autoComplete="name" required value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Email {!phone.trim() && <span className="font-normal text-ink-muted">(required unless phone is provided)</span>}<Input autoComplete="email" type="email" required={!phone.trim()} value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label className="block space-y-1.5 text-sm font-medium">Phone {!email.trim() && <span className="font-normal text-ink-muted">(required unless email is provided)</span>}<Input autoComplete="tel" required={!email.trim()} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
@@ -117,6 +119,7 @@ function CreateUserSheet({ open, onOpenChange, onCreated }: { open: boolean; onO
 export function AccountsUsersPage() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'' | 'guest' | 'active' | 'suspended'>('')
   const [pageIndex, setPageIndex] = useState(0)
@@ -160,7 +163,7 @@ export function AccountsUsersPage() {
                 </TableRow>} containerClassName="" />
       </CardContent>
     </Card>
-    <CreateUserSheet open={createOpen} onOpenChange={setCreateOpen} onCreated={(id) => setDetailsUserId(id)} />
+    <CreateUserSheet open={createOpen} onOpenChange={setCreateOpen} onCreated={(id) => { void navigate({ to: "/app/accounts/organizations/new", search: { ownerId: id } }) }} />
     <ConsumerDetails userId={detailsUserId} onClose={() => setDetailsUserId(null)} />
   </section>
 }

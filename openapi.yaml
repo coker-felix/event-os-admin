@@ -396,15 +396,12 @@ paths:
       tags: [Organizations]
       operationId: HandleAdminListOrganizations
       summary: List organizations
-      description: Requires `admin.users.read`. Returns all organizations, newest first.
+      description: Requires `admin.users.read`. Returns all organizations, newest first. `capability` filters by `organize`, `vend`, or `host`.
       parameters:
-        - name: type
+        - name: capability
           in: query
           required: false
-          description: Restrict results to one organization type.
-          schema:
-            type: string
-            enum: [organizer, vendor, venue]
+          schema: { type: string, enum: [organize, vend, host] }
       responses:
         "200":
           description: Organizations.
@@ -420,13 +417,19 @@ paths:
                       properties:
                         id: { type: string }
                         name: { type: string }
-                        type: { type: string, enum: [organizer, vendor, venue] }
                         ownerId: { type: string }
                         email: { type: string }
                         phone: { type: string }
                         address: { type: string }
                         status: { type: string }
-                        kycStatus: { type: string }
+                        capabilities:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              capability: { type: string, enum: [organize, vend, host] }
+                              status: { type: string, enum: [pending, active, suspended, revoked] }
+                              kybStatus: { type: string, enum: [pending, under_review, approved, rejected, expired] }
                         createdAt: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -435,22 +438,26 @@ paths:
       tags: [Organizations]
       operationId: HandleAdminCreateOrganization
       summary: Create an organization for an existing account
-      description: Requires `admin.users.manage`. The selected account becomes the organization owner and receives its owner membership. KYC remains pending.
+      description: Requires `admin.users.manage`. The selected account becomes the organization owner and receives one owner membership for every distinct capability scope. Requested capabilities start pending with pending KYB.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ownerId, name, type]
+              required: [ownerId, name, capabilities, idempotencyKey]
               properties:
                 ownerId: { type: string, description: Existing consumer account ID. }
-                owner_id: { type: string, description: Existing consumer account ID; accepted for snake_case clients. }
                 name: { type: string }
-                type: { type: string, enum: [organizer, vendor, venue] }
+                capabilities:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { type: string, enum: [organize, vend, host] }
                 email: { type: string, format: email }
                 phone: { type: string }
                 address: { type: string }
+                idempotencyKey: { type: string, format: uuid, description: Reuse this client-generated key for retries. }
       responses:
         "201":
           description: Created.
@@ -461,6 +468,171 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{id}/capabilities/{capability}/status:
+    patch:
+      operationId: HandleAdminSetOrganizationCapabilityStatus
+      tags: [Organizations]
+      summary: Change an organization's capability status
+      description: Requires `admin.users.manage`; changes are audited with the actor and reason.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: capability, in: path, required: true, schema: { type: string, enum: [organize, vend, host] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [pending, active, suspended, revoked] }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200": { description: Capability status updated }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Organization capability not found }
+      security: [{ BearerAuth: [] }]
+  /api/admin/organizations/{id}/capabilities/{capability}/kyb/decision:
+    post:
+      operationId: HandleAdminDecideOrganizationCapabilityKYB
+      tags: [Organizations]
+      summary: Approve or reject capability KYB
+      description: Requires `admin.kyb.review`; a decision reason is required and audited.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: capability, in: path, required: true, schema: { type: string, enum: [organize, vend, host] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [under_review, approved, rejected, expired] }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200": { description: KYB decision recorded }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Organization capability not found }
+      security: [{ BearerAuth: [] }]
+  /api/admin/organizations/{id}/capabilities/{capability}/kyb:
+    post:
+      operationId: HandleAdminSubmitOrganizationCapabilityKYB
+      tags: [Organizations]
+      summary: Submit clean evidence for capability KYB
+      description: Requires `admin.kyb.submit`. Every artifact is checked through Documents for matching organization, capability, kind, and clean scan state. Reuse the UUID idempotency key when retrying.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: capability, in: path, required: true, schema: { type: string, enum: [organize, vend, host] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documents, idempotencyKey]
+              properties:
+                idempotencyKey: { type: string, format: uuid }
+                documents:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [kind, artifactId]
+                    properties:
+                      kind: { type: string }
+                      artifactId: { type: string, format: uuid }
+      responses:
+        "200": { description: Evidence accepted for review }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "424": { description: Evidence upload or scan is incomplete }
+      security: [{ BearerAuth: [] }]
+  /api/admin/organizations/{orgId}/kyb-evidence/uploads:
+    post:
+      operationId: HandleAdminCreateKYBEvidenceUpload
+      tags: [Organizations]
+      summary: Create a short-lived upload authorization for KYB evidence
+      description: Requires `admin.kyb.submit`. Documents creates the storage key and signs the PUT; arbitrary URLs and object keys are not accepted.
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability, kind, contentType, sizeBytes, sha256]
+              properties:
+                capability: { type: string, enum: [organize, vend, host] }
+                kind: { type: string, minLength: 1, maxLength: 100 }
+                contentType: { type: string, enum: [application/pdf, image/jpeg, image/png] }
+                sizeBytes: { type: integer, minimum: 1, maximum: 15728640 }
+                sha256: { type: string, pattern: '^[a-fA-F0-9]{64}$' }
+      responses:
+        "201": { description: Signed upload authorization; keep the URL secret and short lived }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+      security: [{ BearerAuth: [] }]
+  /api/admin/organizations/{orgId}/kyb-evidence/{artifactId}/complete:
+    post:
+      operationId: HandleAdminCompleteKYBEvidenceUpload
+      tags: [Organizations]
+      summary: Confirm an evidence upload and queue it for scanning
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: artifactId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Evidence remains pending until trusted scanning completes }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "412": { description: Object is missing, expired, or does not match declared metadata }
+      security: [{ BearerAuth: [] }]
+  /api/admin/organizations/{orgId}/kyb-evidence/{artifactId}:
+    get:
+      operationId: HandleAdminGetKYBEvidenceArtifact
+      tags: [Organizations]
+      summary: Read evidence status for a specific organization and capability
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: artifactId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: capability, in: query, required: true, schema: { type: string, enum: [organize, vend, host] } }
+      responses:
+        "200": { description: Evidence metadata and scan status; no storage URL is returned }
+        "404": { description: Artifact is absent or belongs to a different organization or capability }
+      security: [{ BearerAuth: [] }]
+  /api/admin/organizations/{id}/capabilities/{capability}/resource-limit:
+    put:
+      operationId: HandleAdminSetOrgCapabilityResourceLimit
+      tags: [Organizations]
+      summary: Configure an organization's capability resource quota
+      description: Requires `admin.users.manage`. The current implementation uses this limit for the vendor profile quota; newly created vendor capabilities default to two profiles.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: capability
+          in: path
+          required: true
+          schema: { type: string, enum: [organize, vend, host] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceLimit, reason]
+              properties:
+                resourceLimit: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200": { description: Quota updated }
+        "403": { description: Admin lacks permission }
+        "404": { description: Organization capability not found }
+      security: [{ BearerAuth: [] }]
   /api/admin/organizations/{id}/members:
     get:
       tags: [Organizations]
@@ -512,7 +684,11 @@ paths:
               properties:
                 owner_id: { type: string }
                 name: { type: string }
-                type: { type: string, enum: [organizer, vendor, venue] }
+                capabilities:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { type: string, enum: [organize, vend, host] }
                 email: { type: string, format: email }
                 phone: { type: string }
                 address: { type: string }
@@ -2288,6 +2464,7 @@ paths:
       parameters:
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
         - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+        - { in: query, name: managingOrgId, schema: { type: string, format: uuid }, description: Filter profiles to one managing organization. }
         - { in: query, name: status, schema: { type: string, enum: [pending, processing, paid, failed, cancelled] } }
       responses:
         "200":
@@ -2329,7 +2506,7 @@ paths:
       tags: [Vendors & Venues]
       operationId: HandleAdminCreateVendor
       summary: Create a vendor profile for an existing account
-      description: Requires `admin.users.manage`. Creates the profile in `pending_approval` and opens the account's vendor KYC case. The account must not already have a vendor profile.
+      description: Requires `admin.users.manage`. Creates a sibling-capable profile in `pending_approval` for the selected account and managing organization, and opens the account's vendor KYC case.
       requestBody:
         required: true
         content:
@@ -2374,6 +2551,43 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{orgId}/vendor-profiles/{vendorId}/service-areas:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminListVendorServiceAreas
+      summary: List regional coverage for an organization vendor profile
+      description: Requires `admin.users.manage`; the profile must belong to the organization and its vendor capability must be active with approved KYB.
+      parameters:
+        - { in: path, name: orgId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: vendorId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Profile-scoped service areas, content: { application/json: { schema: { $ref: "#/components/schemas/VendorServiceAreas" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    put:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminReplaceVendorServiceAreas
+      summary: Replace regional coverage for an organization vendor profile
+      description: Requires `admin.users.manage`; at most 50 valid service areas per profile.
+      parameters:
+        - { in: path, name: orgId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: vendorId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceAreas]
+              properties:
+                serviceAreas: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/VendorServiceAreaInput" } }
+      responses:
+        "200": { description: Replacement service areas, content: { application/json: { schema: { $ref: "#/components/schemas/VendorServiceAreas" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /api/admin/vendors/{id}/status:
     patch:
       tags: [Vendors & Venues]
@@ -4552,6 +4766,34 @@ components:
         description: { type: string }
         heldPayoutAmount: { type: integer, format: int64 }
         onboardingIncomplete: { type: boolean }
+        profileStats: { $ref: "#/components/schemas/VendorProfileStats" }
+    VendorProfileStats:
+      type: object
+      readOnly: true
+      description: Server-derived from profile ratings and completed bookings; never accepted in write requests.
+      properties:
+        ratingCount: { type: integer, format: int64 }
+        averageRating: { type: number, format: double }
+        completedBookingCount: { type: integer, format: int64 }
+    VendorServiceAreaInput:
+      type: object
+      required: [countryCode]
+      properties:
+        countryCode: { type: string, pattern: "^[A-Za-z]{2}$" }
+        regionCode: { type: string }
+        locality: { type: string }
+    VendorServiceAreas:
+      type: object
+      properties:
+        serviceAreas:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/VendorServiceAreaInput"
+              - type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  vendorId: { type: string, format: uuid }
     Venue:
       type: object
       properties:

@@ -77,7 +77,7 @@ export function VendorCalloutsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const organizationsQuery = useQuery({
     queryKey: ['qk-admin-vendor-callout-organizations'],
-    queryFn: () => listAdminOrganizations(session!.token, 'organizer'),
+    queryFn: () => listAdminOrganizations(session!.token, 'organize'),
     enabled: Boolean(session?.token),
   })
   const eventsQuery = useQuery({

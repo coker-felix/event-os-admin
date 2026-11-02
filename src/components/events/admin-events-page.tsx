@@ -38,8 +38,8 @@ function ordersKey(id: string, offset: number) { return [...eventsKey, id, 'orde
 
 async function listEventOrganizations(token: string) {
   const [organizers, venues] = await Promise.all([
-    listAdminOrganizations(token, 'organizer'),
-    listAdminOrganizations(token, 'venue'),
+    listAdminOrganizations(token, 'organize'),
+    listAdminOrganizations(token, 'host'),
   ])
   return { organizations: [...organizers.organizations, ...venues.organizations] }
 }

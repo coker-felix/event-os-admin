@@ -260,98 +260,6 @@ function ExistingAccountPicker({
   );
 }
 
-function CreateOrganizationSheet({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { session } = useAuth();
-  const queryClient = useQueryClient();
-  const [accountId, setAccountId] = useState("");
-  const [name, setName] = useState("");
-  const [type, setType] = useState<"organizer" | "vendor" | "venue">(
-    "organizer",
-  );
-  const mutation = useMutation({
-    mutationFn: () =>
-      createAdminOrganization(session!.token, {
-        owner_id: accountId,
-        name: name.trim(),
-        type,
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: organizationsKey });
-        setName("");
-      setType("organizer");
-      onOpenChange(false);
-    },
-  });
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Create organization</SheetTitle>
-          <SheetDescription>
-            Create an organization for an existing account. That account will be
-            assigned as its owner.
-          </SheetDescription>
-        </SheetHeader>
-        <form
-          id="create-admin-organization"
-          className="flex-1 px-6 pb-6"
-          onSubmit={(event: FormEvent) => {
-            event.preventDefault();
-            mutation.mutate();
-          }}
-        >
-          <FieldGroup className="gap-4">
-            <ExistingAccountPicker
-              value={accountId}
-              onChange={setAccountId}
-              enabled={open}
-              label="Organization owner account"
-            />
-            <Field>
-              <FieldLabel>Organization name</FieldLabel>
-              <Input
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Organization type</FieldLabel>
-              <select
-                value={type}
-                onChange={(event) => setType(event.target.value as typeof type)}
-                className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand"
-              >
-                <option value="organizer">Event Organizer/Planner</option>
-                <option value="vendor">Vendor</option>
-                <option value="venue">Venue Management</option>
-              </select>
-            </Field>
-            {mutation.isError && (
-              <ErrorMessage>{mutation.error.message}</ErrorMessage>
-            )}
-          </FieldGroup>
-        </form>
-        <SheetFooter className="border-t border-line">
-          <Button
-            type="submit"
-            form="create-admin-organization"
-            disabled={mutation.isPending || !accountId || !name.trim()}
-          >
-            {mutation.isPending ? "Creating…" : "Create organization"}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
 function DirectoryTable<T extends { id: string }>({
   title,
   rows,
@@ -1169,12 +1077,12 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
   });
   const organizationsQuery = useQuery({
     queryKey: vendorOrganizationsKey,
-    queryFn: () => listAdminOrganizations(session!.token, "vendor"),
+    queryFn: () => listAdminOrganizations(session!.token, "vend"),
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
-  const [vendor, setVendor] = useState<VendorDirectoryEntry | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [vendor, setVendor] = useState<VendorDirectoryEntry | null>(null);
   const [statusVendor, setStatusVendor] = useState<{
     id: string;
     name: string;
@@ -1735,7 +1643,7 @@ export function AccountsVenueOrganizationsPage() {
   const navigate = useNavigate();
   const organizationsQuery = useQuery({
     queryKey: venueOrganizationsKey,
-    queryFn: () => listAdminOrganizations(session!.token, "venue"),
+    queryFn: () => listAdminOrganizations(session!.token, "host"),
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
@@ -1772,6 +1680,7 @@ export function AccountsVenueOrganizationsPage() {
 
 export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: "directory" | "claims" | "organizations" } = {}) {
   const { session } = useAuth();
+  const [createOpen, setCreateOpen] = useState(false);
   const query = useQuery({
     queryKey: venueKey,
     queryFn: () => listVenueDirectory(session!.token),
@@ -1783,7 +1692,6 @@ export function AccountsVenuesPage({ initialTab = "directory" }: { initialTab?: 
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
   const [historyVenue, setHistoryVenue] = useState<VenueDirectoryEntry | null>(
     null,
   );
@@ -1990,7 +1898,6 @@ export function AccountsOrganizationsPage() {
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
   const [orgPageIndex, setOrgPageIndex] = useState(0);
   const [orgPageSize, setOrgPageSize] = useState(10);
   const organizations = organizationsQuery.data?.organizations ?? [];
@@ -1999,7 +1906,7 @@ export function AccountsOrganizationsPage() {
   );
   const filteredOrganizations = organizations.filter((organization) => {
     const owner = owners.get(organization.ownerId || "");
-    return `${organization.name ?? ""} ${organization.slug ?? ""} ${organization.id} ${organization.type ?? ""} ${organization.ownerId ?? ""} ${owner?.name ?? ""} ${owner?.email ?? ""} ${owner?.phone ?? ""} ${organization.email ?? ""} ${organization.phone ?? ""} ${organization.address ?? ""} ${organization.status ?? ""} ${organization.kycStatus ?? ""}`
+    return `${organization.name ?? ""} ${organization.slug ?? ""} ${organization.id} ${(organization.capabilities ?? []).map((capability) => capability?.capability ?? "").join(" ")} ${organization.ownerId ?? ""} ${owner?.name ?? ""} ${owner?.email ?? ""} ${owner?.phone ?? ""} ${organization.email ?? ""} ${organization.phone ?? ""} ${organization.address ?? ""} ${organization.status ?? ""} ${organization.kycStatus ?? ""}`
       .toLowerCase()
       .includes(search.trim().toLowerCase());
   });
@@ -2018,7 +1925,7 @@ export function AccountsOrganizationsPage() {
             Browse organizations and review their owners and status.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Add organization</Button>
+        <Button onClick={() => void navigate({ to: "/app/accounts/organizations/new" })}>Add organization</Button>
       </div>
       <div className="flex justify-end"><Input
         aria-label="Search organizations"
@@ -2036,7 +1943,7 @@ export function AccountsOrganizationsPage() {
             data={visibleOrganizations}
             headers={[
               "Organization",
-              "Type",
+              "Capabilities",
               "Owner",
               "Contact",
               "Address",
@@ -2085,7 +1992,7 @@ export function AccountsOrganizationsPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <OrganizationTypeBadge type={organization.type} />
+                    <OrganizationTypeBadge type={(organization.capabilities ?? []).map((capability) => capability?.capability).filter(Boolean).join(", ")} />
                   </TableCell>
                   <TableCell>
                     <Identity
@@ -2145,11 +2052,8 @@ export function AccountsOrganizationsPage() {
                         icon={<span aria-hidden="true">↗</span>}
                         onClick={() => {
                           void navigate({
-                            to: "/app/$module/$section" as never,
-                            params: {
-                              module: "organizations",
-                              section: organization.id,
-                            } as never,
+                            to: "/app/accounts/organizations/$orgId",
+                            params: { orgId: organization.id },
                           });
                         }}
                       />
@@ -2161,7 +2065,6 @@ export function AccountsOrganizationsPage() {
           />
         </CardContent>
       </Card>
-      <CreateOrganizationSheet open={createOpen} onOpenChange={setCreateOpen} />
     </section>
   );
 }
@@ -2195,7 +2098,7 @@ export function OrganizationDetailsPage({
   );
   const membersQuery = useQuery({
     queryKey: ["qk-admin-organization-members", organizationId],
-    queryFn: () => listOrganizationMembers(session!.token, organizationId),
+    queryFn: () => listOrganizationMembers(session!.token, organizationId, "organizer"),
     enabled: Boolean(session?.token && organizationId && activeSection === "members"),
   });
   const kycProfilesQuery = useQuery({
@@ -2274,7 +2177,7 @@ export function OrganizationDetailsPage({
                 <p className="mt-1 break-all font-mono text-xs text-ink-muted">{organization.id}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <OrganizationTypeBadge type={organization.type} />
+                <OrganizationTypeBadge type={(organization.capabilities ?? []).map((capability) => capability?.capability).filter(Boolean).join(", ")} />
                 {organization.status === "active" ? <Badge className="bg-success-soft text-success">Active</Badge> : <Badge variant="outline">{organization.status || "Unknown"}</Badge>}
                 {organization.kycStatus === "approved" ? <Badge className="bg-success-soft text-success">KYC approved</Badge> : organization.kycStatus === "pending" ? <Badge className="bg-warning-soft text-warning">KYC pending</Badge> : <Badge variant="outline">KYC {organization.kycStatus || "unknown"}</Badge>}
               </div>
@@ -2317,7 +2220,7 @@ export function OrganizationDetailsPage({
                 <dd>{organization.slug || "—"}</dd>
                 <dt className="text-ink-muted">Type</dt>
                 <dd>
-                  <OrganizationTypeBadge type={organization.type} />
+                  <OrganizationTypeBadge type={(organization.capabilities ?? []).map((capability) => capability?.capability).filter(Boolean).join(", ")} />
                 </dd>
                 <dt className="text-ink-muted">Status</dt>
                 <dd>
@@ -2530,7 +2433,7 @@ export function AccountsOrganizationUsersPage() {
   });
   const membersQuery = useQuery({
     queryKey: ["qk-admin-organization-members", lookupId],
-    queryFn: () => listOrganizationMembers(session!.token, lookupId),
+    queryFn: () => listOrganizationMembers(session!.token, lookupId, "organizer"),
     enabled: Boolean(session?.token && lookupId),
   });
   const organizations = organizationsQuery.data?.organizations ?? [];

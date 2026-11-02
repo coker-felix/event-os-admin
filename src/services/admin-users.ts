@@ -63,8 +63,8 @@ export async function listAdminConsumerChannels(token: string, id: string) {
   return { channels: Array.isArray(payload?.channels) ? payload.channels.filter((channel): channel is AdminConsumerChannel => Boolean(channel && typeof channel.channel === 'string')) : [] }
 }
 
-export function createAdminConsumer(token: string, input: CreateAdminConsumerRequest) {
-  return request<{ id: string }>(token, '/api/admin/users', { method: 'POST', body: JSON.stringify(input) })
+export function createAdminConsumer(token: string, input: CreateAdminConsumerRequest, idempotencyKey: string) {
+  return request<{ id: string }>(token, '/api/admin/users', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ ...input, idempotencyKey }) })
 }
 
 export function setAdminConsumerStatus(token: string, id: string, status: 'active' | 'suspended') {
