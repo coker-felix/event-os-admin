@@ -259,6 +259,14 @@ export function cancelAdminVendorCallout(token: string, calloutId: string) {
   return request<AdminVendorCallout>(token, `/api/admin/vendor-callouts/${encodeURIComponent(calloutId)}/cancel`, { method: 'POST' })
 }
 
+export function createOrganizationVendorCallout(token: string, orgId: string, eventId: string, input: { category: string; serviceKinds: string[]; opensAt: number; closesAt: number }) {
+  return request<AdminVendorCallout>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/events/${encodeURIComponent(eventId)}/vendor-callouts`, { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateOrganizationVendorCallout(token: string, orgId: string, eventId: string, calloutId: string, input: { category: string; serviceKinds: string[]; opensAt: number; closesAt: number }) {
+  return request<AdminVendorCallout>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/events/${encodeURIComponent(eventId)}/vendor-callouts/${encodeURIComponent(calloutId)}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+
 export function getAdminEvent(token: string, eventId: string) {
   return request<{ event?: AdminEvent | null; ticketTypes?: Array<AdminTicketType | null> | null }>(token, `/api/admin/events/${encodeURIComponent(eventId)}`)
 }

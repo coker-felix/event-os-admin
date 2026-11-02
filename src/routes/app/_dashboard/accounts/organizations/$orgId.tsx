@@ -10,6 +10,7 @@ import { OrganizationMembers } from '@/components/accounts/organizations/organiz
 import { OrganizationKYB } from '@/components/accounts/organizations/organization-kyb'
 import { OrganizationVendorProfiles } from '@/components/accounts/organizations/organization-vendor-profiles'
 import { OrganizationVenues } from '@/components/accounts/organizations/organization-venues'
+import { OrganizationCallouts } from '@/components/accounts/organizations/organization-callouts'
 
 export const Route = createFileRoute('/app/_dashboard/accounts/organizations/$orgId')({ component: OrganizationDetailPage })
 
@@ -33,6 +34,7 @@ function OrganizationDetailPage() {
       <OrganizationMembers organizationId={orgId} ownerId={org.ownerId} capabilities={org.capabilities ?? []} />
       <OrganizationVendorProfiles organizationId={orgId} enabled={(org.capabilities ?? []).some((item) => item?.capability === 'vend' && item.status === 'active' && item.kybStatus === 'approved')} />
       <OrganizationVenues organizationId={orgId} enabled={(org.capabilities ?? []).some((item) => item?.capability === 'host' && item.status === 'active' && item.kybStatus === 'approved')} />
+      <OrganizationCallouts organizationId={orgId} enabled={(org.capabilities ?? []).some((item) => item?.capability === 'organize' && item.status === 'active' && item.kybStatus === 'approved')} />
     </> : <p className="text-sm text-ink-muted">No organization details were returned.</p>}
   </section>
 }

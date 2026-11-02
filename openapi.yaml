@@ -1759,6 +1759,45 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{orgId}/events/{eventId}/vendor-callouts:
+    post:
+      tags: [Events]
+      operationId: HandleAdminCreateOrgVendorCallout
+      summary: Create an organization event vendor callout
+      description: Requires `admin.callouts.manage`, an active `organize` capability, and an event owned by the path organization.
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationCalloutInput" }
+      responses:
+        "201": { description: Created callout, content: { application/json: { schema: { $ref: "#/components/schemas/AdminVendorCallout" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/organizations/{orgId}/events/{eventId}/vendor-callouts/{calloutId}:
+    patch:
+      tags: [Events]
+      operationId: HandleAdminUpdateOrgVendorCallout
+      summary: Update an open organization event callout
+      description: Requires `admin.callouts.manage`, an active `organize` capability, no vendor responses, and matching organization, event, and callout IDs.
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: calloutId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationCalloutInput" }
+      responses:
+        "200": { description: Updated callout, content: { application/json: { schema: { $ref: "#/components/schemas/AdminVendorCallout" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /api/admin/vendor-callouts:
     get:
       tags: [Events]
@@ -4473,6 +4512,14 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    OrganizationCalloutInput:
+      type: object
+      required: [category, serviceKinds, opensAt, closesAt]
+      properties:
+        category: { type: string }
+        serviceKinds: { type: array, items: { type: string } }
+        opensAt: { type: integer, format: int64 }
+        closesAt: { type: integer, format: int64 }
     AdminVendorCallout:
       type: object
       properties:
