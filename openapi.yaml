@@ -2691,6 +2691,7 @@ paths:
       parameters:
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
         - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+        - { in: query, name: managingOrgId, schema: { type: string, format: uuid }, description: Filter to venues managed by one organization. }
       responses:
         "200":
           description: Venue page and total count.
@@ -2776,6 +2777,77 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/ServerError" }
+  /api/admin/organizations/{orgId}/venues:
+    post:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminCreateManagedVenue
+      summary: Create an organization-managed venue
+      description: Requires `admin.users.manage` and an active, KYB-approved `host` capability. Creates an independent organization-owned venue record; does not create a global unclaimed directory venue.
+      parameters:
+        - { in: path, name: orgId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ManagedVenueInput" }
+      responses:
+        "201": { description: Created managed venue, content: { application/json: { schema: { $ref: "#/components/schemas/Venue" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/admin/organizations/{orgId}/venues/{venueId}:
+    get:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminGetManagedVenue
+      summary: Get an organization-managed venue
+      description: Requires `admin.users.read` and verifies the venue belongs to the organization.
+      parameters:
+        - { in: path, name: orgId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: venueId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Managed venue, content: { application/json: { schema: { $ref: "#/components/schemas/Venue" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminUpdateManagedVenue
+      summary: Update an organization-managed venue
+      description: Requires `admin.users.manage` and an active, KYB-approved `host` capability. The venue must belong to the organization and must not be archived.
+      parameters:
+        - { in: path, name: orgId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: venueId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ManagedVenueInput" }
+      responses:
+        "200": { description: Updated managed venue, content: { application/json: { schema: { $ref: "#/components/schemas/Venue" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/admin/organizations/{orgId}/venues/{venueId}/archive:
+    post:
+      tags: [Vendors & Venues]
+      operationId: HandleAdminArchiveManagedVenue
+      summary: Archive an organization-managed venue
+      description: Requires `admin.users.manage`, an active `host` capability, and a reason. Archiving preserves the record and history.
+      parameters:
+        - { in: path, name: orgId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: venueId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: { reason: { type: string, minLength: 1 } }
+      responses:
+        "200": { description: Archived venue, content: { application/json: { schema: { $ref: "#/components/schemas/Venue" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /api/admin/venues/{id}/ownership-history:
     get:
       tags: [Vendors & Venues]
@@ -4808,16 +4880,31 @@ components:
           type: object
           additionalProperties: { type: string, format: uri }
         capacity: { type: integer }
-        status: { type: string }
+        status: { type: string, enum: [pending_approval, pending_contract, active, suspended, archived] }
         category: { type: string }
         description: { type: string }
         amenities:
           type: array
           items: { type: string }
         claimed: { type: boolean }
-        createdVia: { type: string, enum: [self_registration, admin_directory, organizer_directory] }
+        createdVia: { type: string, enum: [self_registration, admin_directory, organizer_directory, organization_managed] }
         createdByAccountId: { type: string }
         createdByOrgId: { type: string }
+        managingOrgId: { type: string, format: uuid, nullable: true }
+    ManagedVenueInput:
+      type: object
+      required: [name, capacity]
+      properties:
+        name: { type: string }
+        address: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer, minimum: 1 }
+        category: { type: string }
+        description: { type: string }
+        amenities: { type: array, items: { type: string } }
+        websiteUrl: { type: string, format: uri }
+        socialLinks: { type: object, additionalProperties: { type: string, format: uri } }
     CreateDirectoryVenueRequest:
       type: object
       required: [name, capacity]

@@ -117,3 +117,23 @@ export async function listOrganizationVendorServiceAreas(token: string, orgId: s
 export function replaceOrganizationVendorServiceAreas(token: string, orgId: string, vendorId: string, serviceAreas: Array<Pick<OrganizationVendorServiceArea, 'countryCode' | 'regionCode' | 'locality'>>) {
   return request<{ serviceAreas: OrganizationVendorServiceArea[] }>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/vendor-profiles/${encodeURIComponent(vendorId)}/service-areas`, { method: 'PUT', body: JSON.stringify({ serviceAreas }) })
 }
+
+export interface OrganizationVenue {
+  id: string; managingOrgId: string; name: string; address?: string; city?: string; country?: string; capacity: number;
+  status: string; createdVia: string; category?: string; description?: string; amenities?: string[]; websiteUrl?: string; socialLinks?: Record<string, string>;
+}
+export function listOrganizationVenues(token: string, orgId: string) {
+  return request<{ venues?: Array<OrganizationVenue | null> | null }>(token, `/api/admin/venues?managingOrgId=${encodeURIComponent(orgId)}`).then((payload) => ({ venues: Array.isArray(payload.venues) ? payload.venues.filter((venue): venue is OrganizationVenue => Boolean(venue?.id)) : [] }))
+}
+export function getOrganizationVenue(token: string, orgId: string, venueId: string) {
+  return request<OrganizationVenue>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/venues/${encodeURIComponent(venueId)}`)
+}
+export function createOrganizationVenue(token: string, orgId: string, input: Omit<OrganizationVenue, 'id' | 'managingOrgId' | 'status' | 'createdVia'>) {
+  return request<OrganizationVenue>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/venues`, { method: 'POST', body: JSON.stringify(input) })
+}
+export function updateOrganizationVenue(token: string, orgId: string, venueId: string, input: Omit<OrganizationVenue, 'id' | 'managingOrgId' | 'status' | 'createdVia'>) {
+  return request<OrganizationVenue>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/venues/${encodeURIComponent(venueId)}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+export function archiveOrganizationVenue(token: string, orgId: string, venueId: string, reason: string) {
+  return request<OrganizationVenue>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/venues/${encodeURIComponent(venueId)}/archive`, { method: 'POST', body: JSON.stringify({ reason }) })
+}
