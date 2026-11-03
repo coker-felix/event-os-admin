@@ -30,6 +30,7 @@ export interface VenueDirectoryEntry {
   ownerAccountId?: string | null
   name?: string | null
   address?: string | null
+  countryCode?: string | null
   city?: string | null
   country?: string | null
   capacity?: number | null
@@ -62,6 +63,7 @@ export interface AdminOrganization {
   email?: string | null
   phone?: string | null
   address?: string | null
+  countryCode?: string | null
   status?: string | null
   kycStatus?: string | null
   createdAt?: string | number | null
@@ -74,6 +76,7 @@ export interface CreateAdminOrganizationInput {
   email?: string
   phone?: string
   address?: string
+  countryCode?: string
   idempotencyKey: string
 }
 

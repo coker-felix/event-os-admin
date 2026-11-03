@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/auth'
 import { listAdminConsumers } from '@/services/admin-users'
 import { createAdminOrganization } from '@/services/admin-account-directory'
+import { listCountries } from '@/services/admin-platform'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -22,11 +23,13 @@ function CreateOrganizationPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
+  const [countryCode, setCountryCode] = useState('')
   const [capabilities, setCapabilities] = useState<Array<'organize' | 'vend' | 'host'>>(['organize'])
   const [idempotencyKey, setIdempotencyKey] = useState('')
   const ownersQuery = useQuery({ queryKey: ['admin-users-for-org-owner'], queryFn: () => listAdminConsumers(session!.token), enabled: Boolean(session?.token) })
+  const countriesQuery = useQuery({ queryKey: ['qk-admin-platform-countries'], queryFn: () => listCountries(session!.token), enabled: Boolean(session?.token) })
   const mutation = useMutation({
-    mutationFn: (key: string) => createAdminOrganization(session!.token, { ownerId, name: name.trim(), capabilities, email: email.trim(), phone: phone.trim(), address: address.trim(), idempotencyKey: key }),
+    mutationFn: (key: string) => createAdminOrganization(session!.token, { ownerId, name: name.trim(), capabilities, email: email.trim(), phone: phone.trim(), address: address.trim(), countryCode, idempotencyKey: key }),
     onSuccess: async (result) => {
       const id = result.organization?.id || result.id
       if (!id) throw new Error('Organization was created but the response did not include its ID.')
@@ -49,11 +52,13 @@ function CreateOrganizationPage() {
       <label className="block space-y-1.5 text-sm font-medium">Owner account<select required value={ownerId} onChange={(event) => setOwnerId(event.target.value)} disabled={ownersQuery.isLoading || ownersQuery.isError} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="">Choose a user</option>{(ownersQuery.data?.users ?? []).map((user) => <option key={user.id} value={user.id}>{user.name || user.email || user.phone || user.id} · {user.id}</option>)}</select></label>
       {ownersQuery.isLoading && <p className="text-sm text-ink-muted">Loading users…</p>}{ownersQuery.isError && <p role="alert" className="text-sm text-danger">{ownersQuery.error.message}</p>}
       <label className="block space-y-1.5 text-sm font-medium">Organization name<Input required value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label className="block space-y-1.5 text-sm font-medium">Country<select required aria-label="Organization country" value={countryCode} onChange={(event) => setCountryCode(event.target.value)} disabled={countriesQuery.isLoading || countriesQuery.isError} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="">Choose a country</option>{(countriesQuery.data?.countries ?? []).filter((country) => country.enabled).map((country) => <option key={country.code} value={country.code}>{country.name} ({country.code})</option>)}</select></label>
+      {countriesQuery.isLoading && <p className="text-sm text-ink-muted">Loading supported countries…</p>}{countriesQuery.isError && <p role="alert" className="text-sm text-danger">Supported countries could not be loaded: {countriesQuery.error.message}</p>}
       <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Contact email<Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label className="block space-y-1.5 text-sm font-medium">Contact phone<Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label></div>
       <label className="block space-y-1.5 text-sm font-medium">Address<Input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
       <fieldset className="space-y-2"><legend className="text-sm font-medium">Capabilities</legend>{([['organize','Organize events'],['vend','Provide vendor services'],['host','Host events at venues']] as const).map(([value,label]) => <label key={value} className="flex items-center gap-3 rounded-lg border border-line p-3 text-sm"><input type="checkbox" checked={capabilities.includes(value)} onChange={() => toggleCapability(value)} />{label}</label>)}</fieldset>
       {mutation.isError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{mutation.error.message} You can retry safely; this form keeps the same request key.</p>}
-      <div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => navigate({ to: '/app/accounts/organizations' })}>Cancel</Button><Button type="submit" disabled={mutation.isPending || !ownerId || !name.trim() || capabilities.length === 0}>{mutation.isPending ? 'Creating…' : 'Create organization'}</Button></div>
+      <div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => navigate({ to: '/app/accounts/organizations' })}>Cancel</Button><Button type="submit" disabled={mutation.isPending || !ownerId || !name.trim() || !countryCode || countriesQuery.isError || capabilities.length === 0}>{mutation.isPending ? 'Creating…' : 'Create organization'}</Button></div>
     </form></CardContent></Card>
   </section>
 }

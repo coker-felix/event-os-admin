@@ -31,7 +31,7 @@ export function getOrganizationMemberPermissions(token: string, orgId: string, a
   return request<OrganizationMemberPermissions>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/permissions?actorId=${encodeURIComponent(actorId)}&scope=${encodeURIComponent(scope)}`)
 }
 
-export function updateAdminOrganization(token: string, orgId: string, input: { name: string; email: string; phone: string; address: string; reason: string }) {
+export function updateAdminOrganization(token: string, orgId: string, input: { name: string; email: string; phone: string; address: string; countryCode: string; reason: string }) {
   return request<AdminOrganization>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}`, { method: 'PATCH', body: JSON.stringify(input) })
 }
 
@@ -79,7 +79,48 @@ export function addOrganizationCapability(token: string, orgId: string, input: {
 }
 
 export interface OrganizationKYBEvidence { artifactId: string; kind: string; scanStatus: 'pending' | 'clean' | 'quarantined'; sha256?: string; contentType?: string; sizeBytes?: number }
+export interface OrganizationKYBRequirement {
+  id: string
+  countryCode: string
+  capability: 'organize' | 'vend' | 'host'
+  key: string
+  label: string
+  inputType: 'text' | 'file'
+  required: boolean
+  enabled: boolean
+  sortOrder: number
+}
+export interface OrganizationKYBSubmissionField {
+  key: string
+  label: string
+  inputType: 'text' | 'file'
+  required: boolean
+  textValue?: string
+  artifactId?: string
+}
+export interface OrganizationKYBRequirementSet {
+  countryCode: string
+  capability: string
+  requirements?: Array<OrganizationKYBRequirement | null> | null
+  submittedFields?: Array<OrganizationKYBSubmissionField | null> | null
+}
 interface KYBUploadAuthorization { artifactId: string; uploadUrl: string; method: string; headers: Record<string, string>; expiresAt: string; scanStatus: string }
+
+export function listAdminKYBRequirements(token: string, filters: { countryCode?: string; capability?: string; includeDisabled?: boolean } = {}) {
+  const query = new URLSearchParams()
+  if (filters.countryCode) query.set('countryCode', filters.countryCode)
+  if (filters.capability) query.set('capability', filters.capability)
+  if (filters.includeDisabled) query.set('includeDisabled', 'true')
+  return request<{ requirements?: Array<OrganizationKYBRequirement | null> | null }>(token, `/api/admin/kyb-requirements${query.size ? `?${query.toString()}` : ''}`)
+}
+
+export function upsertAdminKYBRequirement(token: string, input: Omit<OrganizationKYBRequirement, 'countryCode' | 'capability' | 'enabled' | 'id'> & { id?: string; countryCode: string; capability: OrganizationKYBRequirement['capability']; enabled: boolean; reason: string }) {
+  return request<OrganizationKYBRequirement>(token, '/api/admin/kyb-requirements', { method: 'PUT', body: JSON.stringify(input) })
+}
+
+export function getOrganizationKYBRequirements(token: string, orgId: string, capability: string) {
+  return request<OrganizationKYBRequirementSet>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/kyb-requirements?capability=${encodeURIComponent(capability)}`)
+}
 
 async function rawUpload(url: string, method: string, headers: Record<string, string>, file: File) {
   const response = await fetch(url, { method, headers, body: file })
@@ -101,9 +142,9 @@ export function getOrganizationKYBEvidence(token: string, orgId: string, capabil
   return request<OrganizationKYBEvidence>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/kyb-evidence/${encodeURIComponent(artifactId)}?capability=${encodeURIComponent(capability)}`)
 }
 
-export function submitOrganizationCapabilityKYB(token: string, orgId: string, capability: string, documents: Array<{ kind: string; artifactId: string }>, idempotencyKey: string) {
+export function submitOrganizationCapabilityKYB(token: string, orgId: string, capability: string, documents: Array<{ kind: string; artifactId: string }>, idempotencyKey: string, fields: Array<{ key: string; textValue?: string; artifactId?: string }> = []) {
   return request<{ orgId: string; capability: string; status: string }>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/capabilities/${encodeURIComponent(capability)}/kyb`, {
-    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ documents, idempotencyKey }),
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ documents, fields, idempotencyKey }),
   })
 }
 

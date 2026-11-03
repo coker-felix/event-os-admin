@@ -38,8 +38,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CaretDown, Check } from "@phosphor-icons/react";
+import {
+  ArrowsClockwise,
+  CaretDown,
+  Check,
+  Eye,
+  PencilSimple,
+} from "@phosphor-icons/react";
 import { listAdminConsumers } from "@/services/admin-users";
+import {
+  setAdminOrganizationStatus,
+  updateAdminOrganization,
+} from "@/services/admin-organizations";
 import { getAdminKycProfile, listAdminKycProfiles } from "@/services/admin-kyc";
 import { listCountries } from "@/services/admin-platform";
 import { OrganizationFeatureFlagsCard } from "@/components/accounts/organization-feature-flags-card";
@@ -52,6 +62,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FilterTabs } from "@/components/ui/filter-tabs";
 import {
   createAdminOrganization,
   createAdminVendor,
@@ -1880,6 +1891,153 @@ export function MarketplaceReconciliationPage() {
   );
 }
 
+function OrganizationEditDialog({ organization, onClose }: { organization: AdminOrganization | null; onClose: () => void }) {
+  const { session } = useAuth();
+  const client = useQueryClient();
+  const countriesQuery = useQuery({ queryKey: ["qk-admin-platform-countries"], queryFn: () => listCountries(session!.token), enabled: Boolean(session?.token) });
+  const [name, setName] = useState(organization?.name ?? "");
+  const [email, setEmail] = useState(organization?.email ?? "");
+  const [phone, setPhone] = useState(organization?.phone ?? "");
+  const [address, setAddress] = useState(organization?.address ?? "");
+  const [countryCode, setCountryCode] = useState(organization?.countryCode ?? "");
+  const [reason, setReason] = useState("");
+  const mutation = useMutation({
+    mutationFn: () =>
+      updateAdminOrganization(session!.token, organization!.id, {
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        countryCode,
+        reason: reason.trim(),
+      }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: organizationsKey });
+      onClose();
+    },
+  });
+  return (
+    <Dialog
+      open={Boolean(organization)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit organization</DialogTitle>
+          <DialogDescription>
+            Update the organization details for {organization?.name || "this organization"}.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          id="edit-organization"
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            mutation.mutate();
+          }}
+        >
+          <label className="block space-y-1.5 text-sm font-medium">
+            Organization name
+            <Input required value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <label className="block space-y-1.5 text-sm font-medium">
+            Contact email
+            <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+          <label className="block space-y-1.5 text-sm font-medium">
+            Contact phone
+            <Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
+          </label>
+          <label className="block space-y-1.5 text-sm font-medium">
+            Address
+            <Input value={address} onChange={(event) => setAddress(event.target.value)} />
+          </label>
+          <label className="block space-y-1.5 text-sm font-medium">
+            Country
+            <select required value={countryCode} onChange={(event) => setCountryCode(event.target.value)} disabled={countriesQuery.isLoading || countriesQuery.isError} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm">
+              <option value="">Choose a country</option>
+              {(countriesQuery.data?.countries ?? []).filter((country) => country.enabled).map((country) => <option key={country.code} value={country.code}>{country.name} ({country.code})</option>)}
+            </select>
+          </label>
+          <label className="block space-y-1.5 text-sm font-medium">
+            Reason for edit
+            <Input required value={reason} onChange={(event) => setReason(event.target.value)} />
+          </label>
+          {mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}
+        </form>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="edit-organization"
+            disabled={mutation.isPending || !reason.trim()}
+          >
+            {mutation.isPending ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OrganizationStatusDialog({ organization, onClose }: { organization: AdminOrganization | null; onClose: () => void }) {
+  const { session } = useAuth();
+  const client = useQueryClient();
+  const [reason, setReason] = useState("");
+  const nextStatus = organization?.status === "active" ? "suspended" : "active";
+  const mutation = useMutation({
+    mutationFn: () =>
+      setAdminOrganizationStatus(
+        session!.token,
+        organization!.id,
+        nextStatus,
+        reason.trim(),
+      ),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: organizationsKey });
+      onClose();
+    },
+  });
+  return (
+    <Dialog
+      open={Boolean(organization)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Change organization status</DialogTitle>
+          <DialogDescription>
+            Set {organization?.name || "this organization"} to {nextStatus}.
+          </DialogDescription>
+        </DialogHeader>
+        <label className="block space-y-1.5 text-sm font-medium">
+          Reason for status change
+          <Input required value={reason} onChange={(event) => setReason(event.target.value)} />
+        </label>
+        {mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant={nextStatus === "suspended" ? "destructive" : "default"}
+            disabled={mutation.isPending || !reason.trim()}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Saving…" : `Set ${nextStatus}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AccountsOrganizationsPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -1896,15 +2054,22 @@ export function AccountsOrganizationsPage() {
   const [search, setSearch] = useState("");
   const [orgPageIndex, setOrgPageIndex] = useState(0);
   const [orgPageSize, setOrgPageSize] = useState(10);
+  const [capabilityFilter, setCapabilityFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [editingOrganization, setEditingOrganization] = useState<AdminOrganization | null>(null);
+  const [changingStatusOrganization, setChangingStatusOrganization] = useState<AdminOrganization | null>(null);
   const organizations = organizationsQuery.data?.organizations ?? [];
   const owners = new Map(
     (ownersQuery.data?.users ?? []).map((owner) => [owner.id, owner]),
   );
   const filteredOrganizations = organizations.filter((organization) => {
     const owner = owners.get(organization.ownerId || "");
-    return `${organization.name ?? ""} ${organization.slug ?? ""} ${organization.id} ${(organization.capabilities ?? []).map((capability) => capability?.capability ?? "").join(" ")} ${organization.ownerId ?? ""} ${owner?.name ?? ""} ${owner?.email ?? ""} ${owner?.phone ?? ""} ${organization.email ?? ""} ${organization.phone ?? ""} ${organization.address ?? ""} ${organization.status ?? ""} ${organization.kycStatus ?? ""}`
+    const matchesCapability = !capabilityFilter || (organization.capabilities ?? []).some((capability) => capability?.capability === capabilityFilter);
+    const matchesStatus = !statusFilter || organization.status === statusFilter;
+    const matchesSearch = `${organization.name ?? ""} ${organization.slug ?? ""} ${organization.id} ${(organization.capabilities ?? []).map((capability) => capability?.capability ?? "").join(" ")} ${organization.ownerId ?? ""} ${owner?.name ?? ""} ${owner?.email ?? ""} ${owner?.phone ?? ""} ${organization.email ?? ""} ${organization.phone ?? ""} ${organization.address ?? ""} ${organization.status ?? ""} ${organization.kycStatus ?? ""}`
       .toLowerCase()
       .includes(search.trim().toLowerCase());
+    return matchesCapability && matchesStatus && matchesSearch;
   });
   const visibleOrganizations = filteredOrganizations.slice(
     orgPageIndex * orgPageSize,
@@ -1923,30 +2088,55 @@ export function AccountsOrganizationsPage() {
         </div>
         <Button onClick={() => void navigate({ to: "/app/accounts/organizations/new" })}>Add organization</Button>
       </div>
-      <div className="flex justify-end"><Input
-        aria-label="Search organizations"
-        placeholder="Search organization, owner, contact, or status"
-        value={search}
-        onChange={(event) => {
-          setSearch(event.target.value);
-          setOrgPageIndex(0);
-        }}
-        className="sm:w-72"
-      /></div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-3">
+          <FilterTabs
+            label="Filter organizations by capability"
+            value={capabilityFilter}
+            onValueChange={(value) => { setCapabilityFilter(value); setOrgPageIndex(0); }}
+            options={[
+              { value: "", label: "All capabilities" },
+              { value: "organize", label: "Organizer" },
+              { value: "vend", label: "Vendor" },
+              { value: "host", label: "Venue host" },
+            ]}
+          />
+          <FilterTabs
+            label="Filter organizations by status"
+            value={statusFilter}
+            onValueChange={(value) => { setStatusFilter(value); setOrgPageIndex(0); }}
+            options={[
+              { value: "", label: "All statuses" },
+              { value: "active", label: "Active" },
+              { value: "suspended", label: "Suspended" },
+            ]}
+          />
+        </div>
+        <Input
+          aria-label="Search organizations"
+          placeholder="Search organization, owner, contact, or status"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setOrgPageIndex(0);
+          }}
+          className="sm:w-72"
+        />
+      </div>
       <Card className="gap-0 py-0">
         <CardContent className="p-0">
           <DataTable
+            tableClassName="min-w-[1120px] table-fixed"
             data={visibleOrganizations}
             headers={[
-              "Organization",
-              "Capabilities",
-              "Owner",
-              "Contact",
-              "Address",
-              "Status",
-              "KYC",
-              "Created",
-              { label: "Actions", className: "text-right" },
+              { label: "Organization", className: "w-48" },
+              { label: "Capabilities", className: "w-64" },
+              { label: "Owner", className: "w-44" },
+              { label: "Contact", className: "w-56" },
+              { label: "Status", className: "w-28" },
+              { label: "KYC", className: "w-24" },
+              { label: "Created", className: "w-28" },
+              { label: "Actions", className: "w-64 text-right" },
             ]}
             label="Organization directory"
             loading={organizationsQuery.isLoading}
@@ -1957,8 +2147,8 @@ export function AccountsOrganizationsPage() {
                 : null
             }
             emptyMessage={
-              organizations.length
-                ? "No organizations match this search."
+              organizations.length && (search || capabilityFilter || statusFilter)
+                ? "No organizations match the current search or filters."
                 : "No organizations found."
             }
             emptyClassName="h-28 text-center text-sm text-ink-muted"
@@ -1988,7 +2178,7 @@ export function AccountsOrganizationsPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <OrganizationCapabilitiesBadges capabilities={organization.capabilities} />
+                    <div className="min-w-56"><OrganizationCapabilitiesBadges capabilities={organization.capabilities} /></div>
                   </TableCell>
                   <TableCell>
                     <Identity
@@ -2002,13 +2192,11 @@ export function AccountsOrganizationsPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <span className="block">{organization.email || "—"}</span>
-                    <span className="mt-0.5 block text-xs text-ink-muted">
-                      {organization.phone || "No phone"}
+                    <span className="block truncate font-medium">{owner?.name || "Owner name unavailable"}</span>
+                    <span className="mt-0.5 block truncate text-xs text-ink-muted">{organization.email || "No organization email"}</span>
+                    <span className="block truncate text-xs text-ink-muted">
+                      {organization.phone || "No organization phone"}
                     </span>
-                  </TableCell>
-                  <TableCell className="max-w-56 whitespace-normal">
-                    {organization.address || "—"}
                   </TableCell>
                   <TableCell>
                     {organization.status === "active" ? (
@@ -2042,10 +2230,11 @@ export function AccountsOrganizationsPage() {
                       : "—"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
                       <AppIconAction
-                        label={`View details for ${organization.name || "organization"}`}
-                        icon={<span aria-hidden="true">↗</span>}
+                        label="View details"
+                        icon={<Eye aria-hidden="true" />}
+                        showLabel
                         onClick={() => {
                           void navigate({
                             to: "/app/accounts/organizations/$orgId",
@@ -2053,6 +2242,8 @@ export function AccountsOrganizationsPage() {
                           });
                         }}
                       />
+                      <AppIconAction label="Edit" icon={<PencilSimple aria-hidden="true" />} showLabel onClick={() => setEditingOrganization(organization)} />
+                      <AppIconAction label="Change status" icon={<ArrowsClockwise aria-hidden="true" />} showLabel onClick={() => setChangingStatusOrganization(organization)} />
                     </div>
                   </TableCell>
                 </TableRow>
@@ -2061,6 +2252,8 @@ export function AccountsOrganizationsPage() {
           />
         </CardContent>
       </Card>
+      <OrganizationEditDialog key={editingOrganization?.id ?? "edit-organization"} organization={editingOrganization} onClose={() => setEditingOrganization(null)} />
+      <OrganizationStatusDialog key={changingStatusOrganization?.id ?? "organization-status"} organization={changingStatusOrganization} onClose={() => setChangingStatusOrganization(null)} />
     </section>
   );
 }

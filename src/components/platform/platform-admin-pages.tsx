@@ -17,6 +17,7 @@ import {
   updateDistributionChannel, updateEventCategory, updateSubdivision,
   type DistributionChannel, type EventCategory, type SiteConfig, type SupportedCountry, type SupportedSubdivision,
 } from '@/services/admin-platform'
+import { listAdminKYBRequirements, upsertAdminKYBRequirement, type OrganizationKYBRequirement } from '@/services/admin-organizations'
 
 const keys = {
   config: ['qk-admin-platform-config'] as const,
@@ -142,4 +143,60 @@ export function PlatformEventCategoriesPage() {
 
 export function PlatformSponsorsPage() {
   return <section className="space-y-6"><PlatformHeading title="Sponsors" description="Review and manage sponsor catalog entries." /><Card><CardHeader><CardTitle>Sponsor catalog</CardTitle></CardHeader><CardContent><p className="text-sm leading-6 text-ink-muted">The admin API currently exposes update and delete operations for a sponsor when its ID is known. It does not expose an admin list or create operation, so this page cannot load or add sponsor records yet.</p></CardContent></Card></section>
+}
+
+
+export function PlatformKYBRequirementsPage() {
+  const { session } = useAuth()
+  const client = useQueryClient()
+  const [countryCode, setCountryCode] = useState('')
+  const [capability, setCapability] = useState('')
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<OrganizationKYBRequirement | null>(null)
+  const [key, setKey] = useState('')
+  const [label, setLabel] = useState('')
+  const [inputType, setInputType] = useState<'text' | 'file'>('text')
+  const [required, setRequired] = useState(true)
+  const [enabled, setEnabled] = useState(true)
+  const [sortOrder, setSortOrder] = useState('0')
+  const [reason, setReason] = useState('')
+  const countriesQuery = useQuery({ queryKey: keys.countries, queryFn: () => listCountries(session!.token), enabled: Boolean(session?.token) })
+  const query = useQuery({
+    queryKey: ['qk-admin-kyb-requirements', countryCode, capability],
+    queryFn: () => listAdminKYBRequirements(session!.token, { countryCode: countryCode || undefined, capability: capability || undefined, includeDisabled: true }),
+    enabled: Boolean(session?.token),
+  })
+  const refresh = () => client.invalidateQueries({ queryKey: ['qk-admin-kyb-requirements'] })
+  const save = useMutation({
+    mutationFn: () => upsertAdminKYBRequirement(session!.token, {
+      id: editing?.id, countryCode: countryCode || editing?.countryCode || '', capability: (capability || editing?.capability || 'organize') as OrganizationKYBRequirement['capability'],
+      key: key.trim(), label: label.trim(), inputType, required, enabled, sortOrder: Number(sortOrder), reason: reason.trim(),
+    }),
+    onSuccess: async () => { await refresh(); setOpen(false) },
+  })
+  const rows = query.data?.requirements?.filter((item): item is OrganizationKYBRequirement => Boolean(item)) ?? []
+  const openEditor = (item?: OrganizationKYBRequirement) => {
+    setEditing(item ?? null); setCountryCode(item?.countryCode ?? countryCode); setCapability(item?.capability ?? (capability || 'organize'))
+    setKey(item?.key ?? ''); setLabel(item?.label ?? ''); setInputType(item?.inputType ?? 'text'); setRequired(item?.required ?? true)
+    setEnabled(item?.enabled ?? true); setSortOrder(String(item?.sortOrder ?? 0)); setReason(''); save.reset(); setOpen(true)
+  }
+  return <section className="space-y-6">
+    <PlatformHeading title="KYB requirements" description="Configure the information and documents required for each capability in each supported country." action={<Button onClick={() => openEditor()}>Add requirement</Button>} />
+    <div className="flex flex-wrap justify-end gap-3">
+      <select aria-label="Filter by country" value={countryCode} onChange={(event) => setCountryCode(event.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm sm:w-64"><option value="">All countries</option>{(countriesQuery.data?.countries ?? []).map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code})</option>)}</select>
+      <select aria-label="Filter by capability" value={capability} onChange={(event) => setCapability(event.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm sm:w-56"><option value="">All capabilities</option><option value="organize">Organize</option><option value="vend">Vend</option><option value="host">Host</option></select>
+    </div>
+    <Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={rows} headers={['Country', 'Capability', 'Requirement', 'Input', 'Required', 'Status', { label: 'Actions', className: 'text-right' }]} label="KYB requirements" loading={query.isLoading} loadingMessage="Loading KYB requirements…" error={query.isError ? query.error.message : countriesQuery.isError ? countriesQuery.error.message : null} emptyMessage="No KYB requirements match these filters." renderRow={(item) => <TableRow key={item.id}><TableCell className="font-mono text-xs">{item.countryCode}</TableCell><TableCell className="capitalize">{item.capability}</TableCell><TableCell><span className="block font-medium">{item.label}</span><span className="mt-0.5 block font-mono text-xs text-ink-muted">{item.key}</span></TableCell><TableCell className="capitalize">{item.inputType}</TableCell><TableCell>{item.required ? 'Yes' : 'No'}</TableCell><TableCell><EnabledBadge enabled={item.enabled} /></TableCell><TableCell className="text-right"><AppIconAction label={`Edit ${item.label}`} icon={<span aria-hidden="true">✎</span>} onClick={() => openEditor(item)} /></TableCell></TableRow>} containerClassName="" /></CardContent></Card>
+    <Sheet open={open} onOpenChange={setOpen}><SheetContent className="w-full overflow-y-auto sm:max-w-lg"><SheetHeader><SheetTitle>{editing ? `Edit ${editing.label}` : 'Add KYB requirement'}</SheetTitle><SheetDescription>Requirements apply to new submissions for the selected country and capability. Existing submissions keep their saved field labels and values.</SheetDescription></SheetHeader><PlatformForm id="kyb-requirement-form" onSubmit={(event) => { event.preventDefault(); save.mutate() }} error={save.isError ? save.error.message : undefined} pending={save.isPending} submitLabel={editing ? 'Save changes' : 'Add requirement'}>
+      <label className="block space-y-1.5 text-sm font-medium">Country<select required value={countryCode} onChange={(event) => setCountryCode(event.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="">Choose a country</option>{(countriesQuery.data?.countries ?? []).map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code})</option>)}</select></label>
+      <label className="block space-y-1.5 text-sm font-medium">Capability<select required value={capability || editing?.capability || 'organize'} onChange={(event) => setCapability(event.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="organize">Organize</option><option value="vend">Vend</option><option value="host">Host</option></select></label>
+      <label className="block space-y-1.5 text-sm font-medium">Requirement key<Input required pattern="[a-z][a-z0-9_]{1,99}" disabled={Boolean(editing)} value={key} onChange={(event) => setKey(event.target.value.toLowerCase())} placeholder="business_registration_number" /></label>
+      <label className="block space-y-1.5 text-sm font-medium">Label<Input required maxLength={120} value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Business registration number" /></label>
+      <label className="block space-y-1.5 text-sm font-medium">Input type<select value={inputType} onChange={(event) => setInputType(event.target.value as 'text' | 'file')} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="text">Text</option><option value="file">File upload</option></select></label>
+      <label className="block space-y-1.5 text-sm font-medium">Display order<Input type="number" min="0" required value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></label>
+      <label className="flex items-center justify-between gap-3 text-sm font-medium">Required<Switch checked={required} onCheckedChange={setRequired} /></label>
+      <label className="flex items-center justify-between gap-3 text-sm font-medium">Enabled<Switch checked={enabled} onCheckedChange={setEnabled} /></label>
+      <label className="block space-y-1.5 text-sm font-medium">Change reason<Input required minLength={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required for audit history" /></label>
+    </PlatformForm></SheetContent></Sheet>
+  </section>
 }

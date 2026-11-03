@@ -6,7 +6,7 @@ import { ContractsPage } from '@/components/contracts/contracts-page'
 import { InvoicesPage } from '@/components/invoices/invoices-page'
 import { CommerceFeeRulesPage, CommercePayoutsPage, CommerceSettingsPage, CommerceTaxExemptionsPage, CommerceTaxRulesPage } from '@/components/commerce/commerce-admin-pages'
 import { TicketVerificationPage } from '@/components/events/events-ticketing-pages'
-import { PlatformCountriesPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform/platform-admin-pages'
+import { PlatformCountriesPage, PlatformKYBRequirementsPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform/platform-admin-pages'
 import { ModuleAnalyticsOverview } from '@/components/module-analytics-overview'
 
 const moduleLabels: Record<string, string> = {
@@ -36,6 +36,7 @@ const resourceLabels: Record<string, string> = {
   settings: 'Platform settings',
   sponsors: 'Sponsors',
   countries: 'Countries',
+  'kyb-requirements': 'KYB requirements',
   subdivisions: 'Subdivisions',
   'distribution-channels': 'Distribution channels',
   'event-categories': 'Event categories',
@@ -87,6 +88,7 @@ export function AdminModulePage() {
   if (module === 'invoices' && section === 'list') return <InvoicesPage />
   if (module === 'platform' && section === 'settings') return <PlatformSettingsPage />
   if (module === 'platform' && section === 'countries') return <PlatformCountriesPage />
+  if (module === 'platform' && section === 'kyb-requirements') return <PlatformKYBRequirementsPage />
   if (module === 'platform' && section === 'subdivisions') return <PlatformSubdivisionsPage />
   if (module === 'platform' && section === 'distribution-channels') return <PlatformDistributionChannelsPage />
   if (module === 'platform' && section === 'event-categories') return <PlatformEventCategoriesPage />
