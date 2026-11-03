@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/auth'
 import { listAdminConsumers } from '@/services/admin-users'
 import { createAdminOrganization } from '@/services/admin-account-directory'
+import { organizationSocialNetworks, uploadOrganizationLogo } from '@/services/admin-organizations'
 import { listCountries } from '@/services/admin-platform'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,16 +24,21 @@ function CreateOrganizationPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
+  const [description, setDescription] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [socialLinks, setSocialLinks] = useState<Record<string, string>>({})
   const [countryCode, setCountryCode] = useState('')
   const [capabilities, setCapabilities] = useState<Array<'organize' | 'vend' | 'host'>>(['organize'])
   const [idempotencyKey, setIdempotencyKey] = useState('')
   const ownersQuery = useQuery({ queryKey: ['admin-users-for-org-owner'], queryFn: () => listAdminConsumers(session!.token), enabled: Boolean(session?.token) })
   const countriesQuery = useQuery({ queryKey: ['qk-admin-platform-countries'], queryFn: () => listCountries(session!.token), enabled: Boolean(session?.token) })
   const mutation = useMutation({
-    mutationFn: (key: string) => createAdminOrganization(session!.token, { ownerId, name: name.trim(), capabilities, email: email.trim(), phone: phone.trim(), address: address.trim(), countryCode, idempotencyKey: key }),
+    mutationFn: (key: string) => createAdminOrganization(session!.token, { ownerId, name: name.trim(), capabilities, email: email.trim(), phone: phone.trim(), address: address.trim(), countryCode, description: description.trim(), websiteUrl: websiteUrl.trim(), socialLinks: Object.fromEntries(Object.entries(socialLinks).filter(([, url]) => url.trim()).map(([network, url]) => [network, url.trim()])), idempotencyKey: key }),
     onSuccess: async (result) => {
       const id = result.organization?.id || result.id
       if (!id) throw new Error('Organization was created but the response did not include its ID.')
+      if (logoFile) await uploadOrganizationLogo(session!.token, id, logoFile, 'Logo uploaded during organization creation')
       sessionStorage.setItem(`admin-onboarding-org:${id}`, JSON.stringify({ organizationId: id, ownerId, capabilities, completed: ['organization'] }))
       sessionStorage.removeItem(`admin-idempotency:create-org:${ownerId}`)
       await navigate({ to: '/app/accounts/organizations/$orgId', params: { orgId: id } })
@@ -56,6 +62,9 @@ function CreateOrganizationPage() {
       {countriesQuery.isLoading && <p className="text-sm text-ink-muted">Loading supported countries…</p>}{countriesQuery.isError && <p role="alert" className="text-sm text-danger">Supported countries could not be loaded: {countriesQuery.error.message}</p>}
       <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Contact email<Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label className="block space-y-1.5 text-sm font-medium">Contact phone<Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label></div>
       <label className="block space-y-1.5 text-sm font-medium">Address<Input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
+      <label className="block space-y-1.5 text-sm font-medium">About / description<textarea maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm" /></label>
+      <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-1.5 text-sm font-medium">Organization logo<Input type="file" accept="image/png,image/jpeg" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} /><span className="text-xs font-normal text-ink-muted">PNG or JPEG, up to 5 MiB. {logoFile?.name || ""}</span></label><label className="block space-y-1.5 text-sm font-medium">Website URL<Input type="url" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" /></label></div>
+      <fieldset className="grid gap-4 sm:grid-cols-2"><legend className="mb-2 text-sm font-medium">Social profiles</legend>{organizationSocialNetworks.map((network) => <label key={network} className="block space-y-1.5 text-sm font-medium">{network === 'x' ? 'X' : network[0].toUpperCase() + network.slice(1)}<Input type="url" value={socialLinks[network] ?? ''} onChange={(event) => setSocialLinks((current) => ({ ...current, [network]: event.target.value }))} placeholder="https://" /></label>)}</fieldset>
       <fieldset className="space-y-2"><legend className="text-sm font-medium">Capabilities</legend>{([['organize','Organize events'],['vend','Provide vendor services'],['host','Host events at venues']] as const).map(([value,label]) => <label key={value} className="flex items-center gap-3 rounded-lg border border-line p-3 text-sm"><input type="checkbox" checked={capabilities.includes(value)} onChange={() => toggleCapability(value)} />{label}</label>)}</fieldset>
       {mutation.isError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{mutation.error.message} You can retry safely; this form keeps the same request key.</p>}
       <div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => navigate({ to: '/app/accounts/organizations' })}>Cancel</Button><Button type="submit" disabled={mutation.isPending || !ownerId || !name.trim() || !countryCode || countriesQuery.isError || capabilities.length === 0}>{mutation.isPending ? 'Creating…' : 'Create organization'}</Button></div>

@@ -60,9 +60,12 @@ function OrganizationDetailPage() {
       ) : org ? (
         <>
           <header className="flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="break-words text-2xl font-semibold tracking-tight">{org.name || 'Organization'}</h1>
-              <p className="mt-1 break-all text-xs text-ink-muted">{orgId}</p>
+            <div className="flex min-w-0 items-center gap-3">
+              {org.logoUrl ? <img src={org.logoUrl} alt={`${org.name || 'Organization'} logo`} referrerPolicy="no-referrer" className="h-12 w-12 shrink-0 rounded-lg border border-line bg-surface object-contain p-1" /> : <div aria-hidden="true" className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-line bg-surface text-sm font-semibold text-ink-muted">{(org.name || 'O').slice(0, 1).toUpperCase()}</div>}
+              <div className="min-w-0">
+                <h1 className="break-words text-2xl font-semibold tracking-tight">{org.name || 'Organization'}</h1>
+                <p className="mt-1 break-all text-xs text-ink-muted">{orgId}</p>
+              </div>
             </div>
             <Badge className={org.status === 'active' ? 'bg-success-soft text-success' : ''} variant={org.status === 'active' ? 'default' : 'outline'}>
               {org.status || 'Unknown status'}

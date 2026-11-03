@@ -17,6 +17,12 @@ export function getAdminOrganization(token: string, id: string) {
 	return request<AdminOrganization>(token, `/api/admin/organizations/${encodeURIComponent(id)}`).then((organization) => ({ organization }))
 }
 
+export const organizationSocialNetworks = ['facebook', 'instagram', 'linkedin', 'tiktok', 'x', 'youtube'] as const
+export interface OrganizationProfileInput {
+  name: string; email: string; phone: string; address: string; countryCode: string; description: string;
+  logoUrl: string; websiteUrl: string; socialLinks: Record<string, string>; reason: string
+}
+
 export interface OrganizationMemberPermissions {
   actorId?: string
   orgId?: string
@@ -31,8 +37,22 @@ export function getOrganizationMemberPermissions(token: string, orgId: string, a
   return request<OrganizationMemberPermissions>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/permissions?actorId=${encodeURIComponent(actorId)}&scope=${encodeURIComponent(scope)}`)
 }
 
-export function updateAdminOrganization(token: string, orgId: string, input: { name: string; email: string; phone: string; address: string; countryCode: string; reason: string }) {
+export function updateAdminOrganization(token: string, orgId: string, input: OrganizationProfileInput) {
   return request<AdminOrganization>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+
+
+export async function uploadOrganizationLogo(token: string, orgId: string, file: File, reason: string): Promise<AdminOrganization> {
+  const form = new FormData()
+  form.set('file', file)
+  form.set('reason', reason)
+  const response = await authenticatedAdminFetch(token, `${adminApiBaseUrl}/api/admin/organizations/${encodeURIComponent(orgId)}/logo`, { method: 'POST', body: form })
+  const payload: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    const error = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string' ? payload.error : `Request failed (${response.status}).`
+    throw new Error(error)
+  }
+  return payload as AdminOrganization
 }
 
 export function setAdminOrganizationStatus(token: string, orgId: string, status: 'active' | 'suspended', reason: string) {

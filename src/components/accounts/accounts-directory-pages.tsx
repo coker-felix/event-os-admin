@@ -47,8 +47,10 @@ import {
 } from "@phosphor-icons/react";
 import { listAdminConsumers } from "@/services/admin-users";
 import {
+  organizationSocialNetworks,
   setAdminOrganizationStatus,
   updateAdminOrganization,
+  uploadOrganizationLogo,
 } from "@/services/admin-organizations";
 import { getAdminKycProfile, listAdminKycProfiles } from "@/services/admin-kyc";
 import { listCountries } from "@/services/admin-platform";
@@ -1900,7 +1902,16 @@ function OrganizationEditDialog({ organization, onClose }: { organization: Admin
   const [phone, setPhone] = useState(organization?.phone ?? "");
   const [address, setAddress] = useState(organization?.address ?? "");
   const [countryCode, setCountryCode] = useState(organization?.countryCode ?? "");
+  const [description, setDescription] = useState(organization?.description ?? "");
+  const [logoUrl, setLogoUrl] = useState(organization?.logoUrl ?? "");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [websiteUrl, setWebsiteUrl] = useState(organization?.websiteUrl ?? "");
+  const [socialLinks, setSocialLinks] = useState<Record<string, string>>(() => ({ ...(organization?.socialLinks ?? {}) }));
   const [reason, setReason] = useState("");
+  const logoUpload = useMutation({
+    mutationFn: () => uploadOrganizationLogo(session!.token, organization!.id, logoFile!, reason.trim()),
+    onSuccess: async (updated) => { setLogoUrl(updated.logoUrl ?? ""); setLogoFile(null); await client.invalidateQueries({ queryKey: organizationsKey }); },
+  });
   const mutation = useMutation({
     mutationFn: () =>
       updateAdminOrganization(session!.token, organization!.id, {
@@ -1909,6 +1920,10 @@ function OrganizationEditDialog({ organization, onClose }: { organization: Admin
         phone: phone.trim(),
         address: address.trim(),
         countryCode,
+        description: description.trim(),
+        logoUrl: logoUrl.trim(),
+        websiteUrl: websiteUrl.trim(),
+        socialLinks: Object.fromEntries(Object.entries(socialLinks).filter(([, url]) => url.trim()).map(([network, url]) => [network, url.trim()])),
         reason: reason.trim(),
       }),
     onSuccess: async () => {
@@ -1961,6 +1976,9 @@ function OrganizationEditDialog({ organization, onClose }: { organization: Admin
               {(countriesQuery.data?.countries ?? []).filter((country) => country.enabled).map((country) => <option key={country.code} value={country.code}>{country.name} ({country.code})</option>)}
             </select>
           </label>
+          <label className="block space-y-1.5 text-sm font-medium">About / description<textarea maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm" /></label>
+          <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><span className="block text-sm font-medium">Organization logo</span><div className="flex items-center gap-3">{logoUrl ? <img src={logoUrl} alt={organization?.name ? `${organization.name} logo` : "Organization logo"} referrerPolicy="no-referrer" className="h-12 w-12 rounded-lg border border-line bg-surface object-contain p-1" /> : <span className="grid h-12 w-12 place-items-center rounded-lg border border-line text-xs text-ink-muted">No logo</span>}<Input type="file" accept="image/png,image/jpeg" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} /></div><p className="text-xs text-ink-muted">PNG or JPEG, up to 5 MiB. {logoFile?.name || ""}</p><Button type="button" size="sm" variant="outline" disabled={!logoFile || !reason.trim() || logoUpload.isPending} onClick={() => logoUpload.mutate()}>{logoUpload.isPending ? "Uploading…" : "Upload logo"}</Button>{logoUpload.isError && <p role="alert" className="text-sm text-danger">{logoUpload.error.message}</p>}</div><label className="block space-y-1.5 text-sm font-medium">Website URL<Input type="url" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" /></label></div>
+          <fieldset className="grid gap-4 sm:grid-cols-2"><legend className="mb-2 text-sm font-medium">Social profiles</legend>{organizationSocialNetworks.map((network) => <label key={network} className="block space-y-1.5 text-sm font-medium">{network === "x" ? "X" : network[0].toUpperCase() + network.slice(1)}<Input type="url" value={socialLinks[network] ?? ""} onChange={(event) => setSocialLinks((current) => ({ ...current, [network]: event.target.value }))} placeholder="https://" /></label>)}</fieldset>
           <label className="block space-y-1.5 text-sm font-medium">
             Reason for edit
             <Input required value={reason} onChange={(event) => setReason(event.target.value)} />

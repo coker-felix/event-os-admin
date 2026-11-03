@@ -64,6 +64,10 @@ export interface AdminOrganization {
   phone?: string | null
   address?: string | null
   countryCode?: string | null
+  description?: string | null
+  logoUrl?: string | null
+  websiteUrl?: string | null
+  socialLinks?: Record<string, string> | null
   status?: string | null
   kycStatus?: string | null
   createdAt?: string | number | null
@@ -77,6 +81,10 @@ export interface CreateAdminOrganizationInput {
   phone?: string
   address?: string
   countryCode?: string
+  description?: string
+  logoUrl?: string
+  websiteUrl?: string
+  socialLinks?: Record<string, string>
   idempotencyKey: string
 }
 
