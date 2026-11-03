@@ -15,8 +15,8 @@ export interface AdminKycDocument {
   refUrl?: string | null
 }
 
-async function request<T>(token: string, path: string): Promise<T> {
-  const response = await authenticatedAdminFetch(token, `${adminApiBaseUrl}${path}`)
+async function request<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+  const response = await authenticatedAdminFetch(token, `${adminApiBaseUrl}${path}`, init)
   const payload: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     const message = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
@@ -40,4 +40,11 @@ export async function getAdminKycProfile(token: string, profileId: string) {
     profile: response?.profile ?? null,
     documents: Array.isArray(response?.documents) ? response.documents.filter((document): document is AdminKycDocument => Boolean(document)) : [],
   }
+}
+
+export async function decideAdminKycProfile(token: string, profileId: string, decision: 'approved' | 'rejected' | 'changes_requested', note: string) {
+  return request<{ profile?: AdminKycProfile | null }>(token, `/api/admin/kyc/profiles/${encodeURIComponent(profileId)}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, note }),
+  })
 }

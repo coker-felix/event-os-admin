@@ -26,6 +26,17 @@ export interface VendorCatalogService {
   currency?: string | null
 }
 
+export interface AdminVendorCalloutResponse {
+  id?: string | null
+  calloutId?: string | null
+  vendorId?: string | null
+  kind?: string | null
+  description?: string | null
+  priceMinor?: number | string | null
+  currency?: string | null
+  status?: string | null
+}
+
 export interface VenueDirectoryEntry {
   id: string
   ownerAccountId?: string | null
@@ -201,13 +212,57 @@ export async function listVenueDirectory(token: string) {
   return { venues }
 }
 
+export async function listAllAdminVenueDirectory(token: string) {
+  const venues: VenueDirectoryEntry[] = []
+  let offset = 0
+  let total: number | undefined
+  do {
+    const response = await request<{ venues?: Array<VenueDirectoryEntry | null> | null; total?: number | null }>(token, `/api/admin/venues?limit=100&offset=${offset}`)
+    const page = normalizeRows(response?.venues)
+    venues.push(...page)
+    total = typeof response?.total === 'number' ? response.total : undefined
+    if (!page.length || total === undefined) break
+    offset += page.length
+  } while (offset < total)
+  return { venues }
+}
+
 export function getAdminVendor(token: string, id: string) {
   return request<VendorDirectoryEntry>(token, `/api/admin/vendors/${encodeURIComponent(id)}`)
 }
 
 export async function listVendorCatalogServices(token: string, id: string) {
-  const response = await request<{ services?: Array<VendorCatalogService | null> | null }>(token, `/api/v1/vendors/${encodeURIComponent(id)}/services`)
+  const response = await request<{ services?: Array<VendorCatalogService | null> | null }>(token, `/api/admin/vendors/${encodeURIComponent(id)}/services`)
   return { services: Array.isArray(response?.services) ? response.services.filter((service): service is VendorCatalogService => Boolean(service && service.kind)) : [] }
+}
+
+export async function listAdminVendorCalloutResponses(token: string, id: string) {
+  const response = await request<{ responses?: Array<AdminVendorCalloutResponse | null> | null }>(token, `/api/admin/vendors/${encodeURIComponent(id)}/callout-responses`)
+  return { responses: Array.isArray(response?.responses) ? response.responses.filter((item): item is AdminVendorCalloutResponse => Boolean(item && item.id)) : [] }
+}
+
+export function createAdminVendorService(token: string, id: string, input: { kind: string; name: string; priceMinor: number; currency: string }) {
+  return request<VendorCatalogService>(token, `/api/admin/vendors/${encodeURIComponent(id)}/services`, { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateAdminVendorService(token: string, id: string, kind: string, input: { name: string; priceMinor: number; currency: string }) {
+  return request<VendorCatalogService>(token, `/api/admin/vendors/${encodeURIComponent(id)}/services/${encodeURIComponent(kind)}`, { method: 'PUT', body: JSON.stringify(input) })
+}
+
+export function deleteAdminVendorService(token: string, id: string, kind: string) {
+  return request<{ deleted?: boolean }>(token, `/api/admin/vendors/${encodeURIComponent(id)}/services/${encodeURIComponent(kind)}`, { method: 'DELETE' })
+}
+
+export function createAdminVendorCalloutResponse(token: string, id: string, input: { calloutId: string; kind: string; description: string; priceMinor: number; currency: string }) {
+  return request<AdminVendorCalloutResponse>(token, `/api/admin/vendors/${encodeURIComponent(id)}/callout-responses`, { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateAdminVendorCalloutResponse(token: string, id: string, responseId: string, input: { kind: string; description: string; priceMinor: number; currency: string }) {
+  return request<AdminVendorCalloutResponse>(token, `/api/admin/vendors/${encodeURIComponent(id)}/callout-responses/${encodeURIComponent(responseId)}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+
+export function deleteAdminVendorCalloutResponse(token: string, id: string, responseId: string) {
+  return request<{ deleted?: boolean }>(token, `/api/admin/vendors/${encodeURIComponent(id)}/callout-responses/${encodeURIComponent(responseId)}`, { method: 'DELETE' })
 }
 
 export function getAdminVenue(token: string, id: string) {

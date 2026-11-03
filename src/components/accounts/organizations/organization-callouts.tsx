@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cancelAdminVendorCallout, closeAdminVendorCallout, createOrganizationVendorCallout, listAdminEvents, listAdminVendorCallouts, updateOrganizationVendorCallout, type AdminVendorCallout } from '@/services/admin-events-ticketing'
+import { listVendorServiceCatalog, type VendorServiceCatalogEntry } from '@/services/admin-service-catalog'
 
-const blank = { category: 'general', serviceKinds: 'wristbands', opensAt: '', closesAt: '' }
+const blank = { category: 'general', serviceKinds: '', opensAt: '', closesAt: '' }
 const toLocal = (seconds?: number | string | null) => seconds ? new Date(Number(seconds) * 1000).toISOString().slice(0, 16) : ''
 type CalloutDraft = typeof blank
 
-function CalloutEditor({ draft, onDraft, editing, pending, error, onSubmit, onCancel }: {
+function CalloutEditor({ draft, onDraft, editing, pending, error, onSubmit, onCancel, serviceKinds }: {
   draft: CalloutDraft
   onDraft: (draft: CalloutDraft) => void
   editing: boolean
@@ -18,13 +19,16 @@ function CalloutEditor({ draft, onDraft, editing, pending, error, onSubmit, onCa
   error?: string
   onSubmit: (event: React.FormEvent) => void
   onCancel: () => void
+  serviceKinds: VendorServiceCatalogEntry[]
 }) {
+  const selectedKinds = draft.serviceKinds.split(',').map((kind) => kind.trim()).filter(Boolean)
+  const selectedKindSet = new Set(selectedKinds)
   return <form className="grid gap-3 border-t border-line pt-4 sm:grid-cols-2" onSubmit={onSubmit}>
     <label className="space-y-1 text-xs font-medium">Category<Input required value={draft.category} onChange={(event) => onDraft({ ...draft, category: event.target.value })} /></label>
-    <label className="space-y-1 text-xs font-medium">Service kinds<Input required value={draft.serviceKinds} onChange={(event) => onDraft({ ...draft, serviceKinds: event.target.value })} /></label>
+    <fieldset className="space-y-2 sm:col-span-2"><legend className="text-xs font-medium">Requested services</legend>{serviceKinds.length ? <div className="grid gap-2 sm:grid-cols-2">{serviceKinds.map((service) => <label key={service.kind} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm"><input type="checkbox" checked={selectedKindSet.has(service.kind)} disabled={!service.enabled} onChange={(event) => { const next = event.target.checked ? [...selectedKinds, service.kind] : selectedKinds.filter((kind) => kind !== service.kind); onDraft({ ...draft, serviceKinds: next.join(',') }) }} />{service.name}{!service.enabled && <span className="text-xs text-ink-muted">(disabled)</span>}</label>)}</div> : <p className="text-sm text-ink-muted">No service types are configured in the service catalog.</p>}</fieldset>
     <label className="space-y-1 text-xs font-medium">Opens at<Input required type="datetime-local" value={draft.opensAt} onChange={(event) => onDraft({ ...draft, opensAt: event.target.value })} /></label>
     <label className="space-y-1 text-xs font-medium">Closes at<Input required type="datetime-local" value={draft.closesAt} onChange={(event) => onDraft({ ...draft, closesAt: event.target.value })} /></label>
-    <div className="flex gap-2 sm:col-span-2"><Button type="submit" disabled={pending}>{editing ? 'Save callout' : 'Create callout'}</Button>{editing && <Button type="button" variant="outline" onClick={onCancel}>Cancel edit</Button>}</div>
+    <div className="flex gap-2 sm:col-span-2"><Button type="submit" disabled={pending || selectedKinds.length === 0}>{editing ? 'Save callout' : 'Create callout'}</Button>{editing && <Button type="button" variant="outline" onClick={onCancel}>Cancel edit</Button>}</div>
     {error && <p role="alert" className="text-sm text-danger sm:col-span-2">{error}</p>}
   </form>
 }
@@ -63,7 +67,7 @@ function OrganizationEventPicker({ enabled, events, eventId, onChange }: { enabl
   </>
 }
 
-function OrganizationCalloutWorkspace({ enabled, eventId, selectedEvent, items, form, onDraft, editing, pending, formError, statusError, loading, error, onSubmit, onCancelEdit, onEdit, onClose, onCancel }: {
+function OrganizationCalloutWorkspace({ enabled, eventId, selectedEvent, items, form, onDraft, editing, pending, formError, statusError, loading, error, onSubmit, onCancelEdit, onEdit, onClose, onCancel, serviceKinds }: {
   enabled: boolean
   eventId: string
   selectedEvent?: { title?: string | null }
@@ -81,11 +85,12 @@ function OrganizationCalloutWorkspace({ enabled, eventId, selectedEvent, items, 
   onEdit: (callout: AdminVendorCallout) => void
   onClose: (id: string) => void
   onCancel: (id: string) => void
+  serviceKinds: VendorServiceCatalogEntry[]
 }) {
   if (!enabled || !eventId) return null
   return <>
     <CalloutList items={items} loading={loading} error={error} eventTitle={selectedEvent?.title} onEdit={onEdit} onClose={onClose} onCancel={onCancel} />
-    <CalloutEditor draft={form} onDraft={onDraft} editing={editing} pending={pending} error={formError} onSubmit={onSubmit} onCancel={onCancelEdit} />
+    <CalloutEditor draft={form} onDraft={onDraft} editing={editing} pending={pending} error={formError} onSubmit={onSubmit} onCancel={onCancelEdit} serviceKinds={serviceKinds} />
     {statusError && <p role="alert" className="text-sm text-danger">{statusError}</p>}
   </>
 }
@@ -97,6 +102,7 @@ export function OrganizationCallouts({ organizationId, enabled }: { organization
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState<AdminVendorCallout | null>(null)
   const events = useQuery({ queryKey: ['admin-org-callout-events', organizationId], queryFn: () => listAdminEvents(session!.token, { orgId: organizationId }), enabled: Boolean(session?.token && enabled) })
+  const serviceCatalog = useQuery({ queryKey: ['qk-admin-vendor-service-catalog', 'all'], queryFn: () => listVendorServiceCatalog(session!.token, true), enabled: Boolean(session?.token && enabled) })
   const callouts = useQuery({ queryKey: ['admin-org-callouts', organizationId, eventId], queryFn: () => listAdminVendorCallouts(session!.token, { orgId: organizationId, eventId }), enabled: Boolean(session?.token && enabled && eventId) })
   const invalidate = async () => Promise.all([client.invalidateQueries({ queryKey: ['admin-org-callouts', organizationId] }), client.invalidateQueries({ queryKey: ['qk-admin-vendor-callouts'] })])
   const input = () => ({ category: form.category.trim(), serviceKinds: form.serviceKinds.split(',').map((kind) => kind.trim()).filter(Boolean), opensAt: Math.floor(new Date(form.opensAt).getTime() / 1000), closesAt: Math.floor(new Date(form.closesAt).getTime() / 1000) })
@@ -120,6 +126,7 @@ export function OrganizationCallouts({ organizationId, enabled }: { organization
     {!enabled && <p className="text-sm text-ink-muted">Approve KYB and activate the organize capability to manage event callouts.</p>}
     <OrganizationEventPicker enabled={enabled} events={events.data ?? { events: [] }} eventId={eventId} onChange={(id) => { setEventId(id); setEditing(null); setForm(blank) }} />
     {events.isLoading && <p className="text-sm text-ink-muted">Loading events…</p>}{events.isError && <p role="alert" className="text-sm text-danger">{events.error.message}</p>}
-    <OrganizationCalloutWorkspace enabled={enabled} eventId={eventId} selectedEvent={selectedEvent} items={items} form={form} onDraft={setForm} editing={Boolean(editing)} pending={create.isPending || update.isPending} formError={formError} statusError={statusError} loading={callouts.isLoading} error={callouts.isError ? callouts.error.message : undefined} onSubmit={submit} onCancelEdit={cancelEdit} onEdit={editCallout} onClose={closeCallout} onCancel={cancelCallout} />
+    {serviceCatalog.isError && <p role="alert" className="text-sm text-danger">{serviceCatalog.error.message}</p>}
+    <OrganizationCalloutWorkspace enabled={enabled} eventId={eventId} selectedEvent={selectedEvent} items={items} form={form} onDraft={setForm} editing={Boolean(editing)} pending={create.isPending || update.isPending || serviceCatalog.isLoading} formError={formError} statusError={statusError} loading={callouts.isLoading} error={callouts.isError ? callouts.error.message : undefined} onSubmit={submit} onCancelEdit={cancelEdit} onEdit={editCallout} onClose={closeCallout} onCancel={cancelCallout} serviceKinds={serviceCatalog.data?.services ?? []} />
   </CardContent></Card>
 }

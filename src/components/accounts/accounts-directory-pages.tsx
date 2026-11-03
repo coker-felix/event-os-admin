@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth";
 import { AppIconAction } from "@/components/ui/app-icon-action";
 import { DataTable } from "@/components/ui/data-table";
@@ -80,6 +81,13 @@ import {
   listVenueDirectory,
   listVenueOrganizationReconciliation,
   listVendorCatalogServices,
+  listAdminVendorCalloutResponses,
+  createAdminVendorService,
+  updateAdminVendorService,
+  deleteAdminVendorService,
+  createAdminVendorCalloutResponse,
+  updateAdminVendorCalloutResponse,
+  deleteAdminVendorCalloutResponse,
   patchDirectoryVenue,
   resolveVenueOrganization,
   setVenueStatus,
@@ -88,9 +96,13 @@ import {
   updateVendorTier,
   type AdminVenueClaim,
   type AdminOrganization,
+  type VendorCatalogService,
+  type AdminVendorCalloutResponse,
   type VenueDirectoryEntry,
   type VendorDirectoryEntry,
 } from "@/services/admin-account-directory";
+import { listAdminVendorCallouts, type AdminVendorCallout } from "@/services/admin-events-ticketing";
+import { listVendorServiceCatalog } from "@/services/admin-service-catalog";
 
 const vendorKey = ["qk-admin-vendor-directory"] as const;
 const venueKey = ["qk-admin-venue-directory"] as const;
@@ -1350,7 +1362,11 @@ export function VendorDetailsPage({ vendorId }: { vendorId: string }) {
   const [activeSection, setActiveSection] = useState<"profile" | "services" | "callouts" | "bookings">("profile");
   const [editOpen, setEditOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [serviceEditor, setServiceEditor] = useState<{ editingKind?: string; kind: string; name: string; priceMinor: string; currency: string } | null>(null);
+  const [calloutEditor, setCalloutEditor] = useState<{ editingId?: string; calloutId: string; kind: string; description: string; priceMinor: string; currency: string } | null>(null);
+  const [deleteResponse, setDeleteResponse] = useState<AdminVendorCalloutResponse | null>(null);
   const { session } = useAuth();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const vendorQuery = useQuery({
     queryKey: [...vendorKey, "detail", vendorId],
@@ -1362,8 +1378,51 @@ export function VendorDetailsPage({ vendorId }: { vendorId: string }) {
     queryFn: () => listVendorCatalogServices(session!.token, vendorId),
     enabled: Boolean(session?.token && vendorId && activeSection === "services"),
   });
+  const calloutsQuery = useQuery({
+    queryKey: [...vendorKey, "callout-responses", vendorId],
+    queryFn: () => listAdminVendorCalloutResponses(session!.token, vendorId),
+    enabled: Boolean(session?.token && vendorId && activeSection === "callouts"),
+  });
+  const serviceCatalogQuery = useQuery({
+    queryKey: ["qk-admin-vendor-service-catalog", "enabled"],
+    queryFn: () => listVendorServiceCatalog(session!.token),
+    enabled: Boolean(session?.token && (activeSection === "services" || activeSection === "callouts")),
+  });
+  const availableCalloutsQuery = useQuery({
+    queryKey: [...vendorKey, "available-callouts", vendorId],
+    queryFn: () => listAdminVendorCallouts(session!.token, { status: "open", limit: 100, offset: 0 }),
+    enabled: Boolean(session?.token && activeSection === "callouts" && !calloutEditor?.editingId),
+  });
+  const refreshServices = () => queryClient.invalidateQueries({ queryKey: [...vendorKey, "services", vendorId] });
+  const refreshCallouts = () => queryClient.invalidateQueries({ queryKey: [...vendorKey, "callout-responses", vendorId] });
+  const saveService = useMutation({
+    mutationFn: (draft: NonNullable<typeof serviceEditor>) => draft.editingKind
+      ? updateAdminVendorService(session!.token, vendorId, draft.editingKind, { name: draft.name.trim(), priceMinor: Number(draft.priceMinor), currency: draft.currency.trim().toUpperCase() })
+      : createAdminVendorService(session!.token, vendorId, { kind: draft.kind, name: draft.name.trim(), priceMinor: Number(draft.priceMinor), currency: draft.currency.trim().toUpperCase() }),
+    onSuccess: async () => { await refreshServices(); setServiceEditor(null); toast.success("Vendor service saved.") },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const removeService = useMutation({
+    mutationFn: (kind: string) => deleteAdminVendorService(session!.token, vendorId, kind),
+    onSuccess: async () => { await refreshServices(); toast.success("Vendor service deleted.") },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const saveCallout = useMutation({
+    mutationFn: (draft: NonNullable<typeof calloutEditor>) => draft.editingId
+      ? updateAdminVendorCalloutResponse(session!.token, vendorId, draft.editingId, { kind: draft.kind, description: draft.description.trim(), priceMinor: Number(draft.priceMinor), currency: draft.currency.trim().toUpperCase() })
+      : createAdminVendorCalloutResponse(session!.token, vendorId, { calloutId: draft.calloutId, kind: draft.kind, description: draft.description.trim(), priceMinor: Number(draft.priceMinor), currency: draft.currency.trim().toUpperCase() }),
+    onSuccess: async () => { await refreshCallouts(); setCalloutEditor(null); toast.success("Callout response saved.") },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const removeCallout = useMutation({
+    mutationFn: (responseId: string) => deleteAdminVendorCalloutResponse(session!.token, vendorId, responseId),
+    onSuccess: async () => { await refreshCallouts(); setDeleteResponse(null); toast.success("Callout response deleted.") },
+    onError: (error: Error) => toast.error(error.message),
+  });
   const vendor = vendorQuery.data;
   const services = servicesQuery.data?.services ?? [];
+  const calloutResponses = calloutsQuery.data?.responses ?? [];
+  const serviceCatalog = serviceCatalogQuery.data?.services ?? [];
   const sections = ["profile", "services", "callouts", "bookings"] as const;
   const sectionLabels = {
     profile: "Profile",
@@ -1423,20 +1482,47 @@ export function VendorDetailsPage({ vendorId }: { vendorId: string }) {
               </dl></CardContent>
             </Card>}
             {activeSection === "services" && <Card>
-              <CardHeader><CardTitle>Services</CardTitle></CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Services</CardTitle><Button size="sm" onClick={() => setServiceEditor({ kind: "", name: "", priceMinor: "0", currency: "GHS" })}>Add service</Button></CardHeader>
               <CardContent>
                 {servicesQuery.isLoading ? <p className="py-6 text-center text-sm text-ink-muted">Loading vendor services…</p>
                   : servicesQuery.isError ? <ErrorMessage>{servicesQuery.error.message}</ErrorMessage>
                     : services.length === 0 ? <p className="py-6 text-center text-sm text-ink-muted">No services are listed for this vendor.</p>
-                      : <ul className="divide-y divide-line">{services.map((service) => <li key={service.kind} className="flex flex-wrap items-start justify-between gap-3 py-4 first:pt-0 last:pb-0"><div className="min-w-0"><p className="font-medium">{service.name || "Unnamed service"}</p><p className="mt-1 text-xs text-ink-muted">{service.kind || "Service type unavailable"}</p></div><p className="shrink-0 text-right font-medium tabular-nums">{displayVendorServicePrice(service.priceMinor, service.currency)}</p></li>)}</ul>}
+                      : <ul className="divide-y divide-line">{services.map((service) => <li key={service.kind} className="flex flex-wrap items-start justify-between gap-3 py-4 first:pt-0 last:pb-0"><div className="min-w-0"><p className="font-medium">{service.name || "Unnamed service"}</p><p className="mt-1 text-xs text-ink-muted">{service.kind || "Service type unavailable"}</p></div><div className="flex items-center gap-4"><p className="shrink-0 text-right font-medium tabular-nums">{displayVendorServicePrice(service.priceMinor, service.currency)}</p><Button size="sm" variant="outline" onClick={() => setServiceEditor({ editingKind: service.kind || undefined, kind: service.kind || "", name: service.name || "", priceMinor: String(service.priceMinor ?? 0), currency: service.currency || "GHS" })}>Edit</Button><Button size="sm" variant="ghost" disabled={removeService.isPending} onClick={() => service.kind && removeService.mutate(service.kind)}>Delete</Button></div></li>)}</ul>}
               </CardContent>
             </Card>}
-            {activeSection === "callouts" && <Card><CardHeader><CardTitle>Vendor callouts</CardTitle></CardHeader><CardContent><p className="text-sm text-ink-muted">Vendor-specific callout responses are not available through the admin API yet.</p></CardContent></Card>}
+            {activeSection === "callouts" && <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>Vendor callouts</CardTitle><Button size="sm" onClick={() => setCalloutEditor({ calloutId: "", kind: "", description: "", priceMinor: "0", currency: "GHS" })}>Add response</Button></CardHeader><CardContent>
+              {calloutsQuery.isLoading ? <p className="py-6 text-center text-sm text-ink-muted">Loading callout responses…</p>
+                : calloutsQuery.isError ? <ErrorMessage>{calloutsQuery.error.message}</ErrorMessage>
+                  : calloutResponses.length === 0 ? <p className="py-6 text-center text-sm text-ink-muted">This vendor has not applied to any callouts.</p>
+                    : <ul className="divide-y divide-line">{calloutResponses.map((response) => <li key={response.id} className="flex flex-wrap items-start justify-between gap-3 py-4 first:pt-0 last:pb-0"><div className="min-w-0"><p className="font-medium">{response.kind || "Service offer"}</p><p className="mt-1 break-words text-sm text-ink-muted">{response.description || "No description provided"}</p><p className="mt-1 break-all font-mono text-xs text-ink-muted">Callout {response.calloutId || "unavailable"} · {response.status || "Unknown status"}</p></div><div className="flex items-center gap-4"><p className="shrink-0 text-right font-medium tabular-nums">{displayVendorServicePrice(response.priceMinor, response.currency)}</p><Button size="sm" variant="outline" disabled={response.status !== "applied"} onClick={() => setCalloutEditor({ editingId: response.id || undefined, calloutId: response.calloutId || "", kind: response.kind || "", description: response.description || "", priceMinor: String(response.priceMinor ?? 0), currency: response.currency || "GHS" })}>Edit</Button><Button size="sm" variant="ghost" disabled={response.status === "selected" || removeCallout.isPending} onClick={() => setDeleteResponse(response)}>Delete</Button></div></li>)}</ul>}
+            </CardContent></Card>}
             {activeSection === "bookings" && <Card><CardHeader><CardTitle>Bookings</CardTitle></CardHeader><CardContent><p className="text-sm text-ink-muted">Vendor bookings are not available through the admin API yet.</p></CardContent></Card>}
             </div>
           </div>}
     <VendorProfileEditSheet key={`${vendor?.id ?? "no-vendor"}-detail-edit-${editOpen}`} vendor={editOpen ? vendor ?? null : null} onClose={() => setEditOpen(false)} />
     <ProfileStatusDialog key={`${vendor?.id ?? "no-vendor"}-detail-status-${statusOpen}`} kind="vendor" profile={statusOpen && vendor ? { id: vendor.id, name: vendor.businessName || "vendor", status: vendor.status, managingOrgId: vendor.managingOrgId } : null} onClose={() => setStatusOpen(false)} />
+    <Dialog open={Boolean(serviceEditor)} onOpenChange={(open) => { if (!open) setServiceEditor(null) }}>
+      <DialogContent><DialogHeader><DialogTitle>{serviceEditor?.editingKind ? "Edit service" : "Add service"}</DialogTitle><DialogDescription>Manage this vendor’s catalog offering and price.</DialogDescription></DialogHeader>
+        {serviceEditor && <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); saveService.mutate(serviceEditor) }}>
+          <label className="block space-y-1 text-sm"><span className="font-medium">Service type</span><select required value={serviceEditor.kind} disabled={Boolean(serviceEditor.editingKind)} onChange={(event) => { const entry = serviceCatalog.find((item) => item.kind === event.target.value); setServiceEditor({ ...serviceEditor, kind: event.target.value, name: serviceEditor.name || entry?.name || "" }) }} className="h-10 w-full rounded-xl border border-line bg-surface px-3"><option value="">{serviceCatalogQuery.isLoading ? "Loading service types…" : "Choose a service"}</option>{serviceCatalog.map((entry) => <option key={entry.kind} value={entry.kind} disabled={!serviceEditor.editingKind && services.some((service) => service.kind === entry.kind)}>{entry.name}</option>)}{serviceEditor.editingKind && !serviceCatalog.some((entry) => entry.kind === serviceEditor.editingKind) && <option value={serviceEditor.editingKind}>{serviceEditor.editingKind.replaceAll("_", " ")} (disabled)</option>}</select>{serviceCatalogQuery.isError && <span role="alert" className="text-xs text-danger">{serviceCatalogQuery.error.message}</span>}</label>
+          <label className="block space-y-1 text-sm"><span className="font-medium">Display name</span><Input required value={serviceEditor.name} onChange={(event) => setServiceEditor({ ...serviceEditor, name: event.target.value })} /></label>
+          <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1 text-sm"><span className="font-medium">Price (minor units)</span><Input required type="number" min="0" step="1" value={serviceEditor.priceMinor} onChange={(event) => setServiceEditor({ ...serviceEditor, priceMinor: event.target.value })} /></label><label className="block space-y-1 text-sm"><span className="font-medium">Currency</span><Input required minLength={3} maxLength={3} value={serviceEditor.currency} onChange={(event) => setServiceEditor({ ...serviceEditor, currency: event.target.value.toUpperCase() })} /></label></div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setServiceEditor(null)}>Cancel</Button><Button type="submit" disabled={saveService.isPending}>{saveService.isPending ? "Saving…" : "Save service"}</Button></DialogFooter>
+        </form>}
+      </DialogContent>
+    </Dialog>
+    <Dialog open={Boolean(calloutEditor)} onOpenChange={(open) => { if (!open) setCalloutEditor(null) }}>
+      <DialogContent><DialogHeader><DialogTitle>{calloutEditor?.editingId ? "Edit callout response" : "Add callout response"}</DialogTitle><DialogDescription>Create or update an offer on behalf of this vendor. Selected responses are locked because they have created a booking.</DialogDescription></DialogHeader>
+        {calloutEditor && <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); saveCallout.mutate(calloutEditor) }}>
+          {!calloutEditor.editingId && <label className="block space-y-1 text-sm"><span className="font-medium">Open callout</span><select required value={calloutEditor.calloutId} onChange={(event) => { const callout = availableCalloutsQuery.data?.callouts.find((item) => item.id === event.target.value); setCalloutEditor({ ...calloutEditor, calloutId: event.target.value, kind: callout?.serviceKinds?.find((kind): kind is string => Boolean(kind)) || "" }) }} className="h-10 w-full rounded-xl border border-line bg-surface px-3"><option value="">Choose a callout</option>{(availableCalloutsQuery.data?.callouts ?? []).map((callout) => <option key={callout.id} value={callout.id}>{callout.eventTitle || callout.event?.title || "Event"} · {callout.category || callout.id}</option>)}</select>{availableCalloutsQuery.isError && <span role="alert" className="block text-xs text-danger">{availableCalloutsQuery.error.message}</span>}{!availableCalloutsQuery.isLoading && !availableCalloutsQuery.isError && !availableCalloutsQuery.data?.callouts.length && <span className="block text-xs text-ink-muted">No open callouts available.</span>}</label>}
+          <label className="block space-y-1 text-sm"><span className="font-medium">Service type</span><select required value={calloutEditor.kind} onChange={(event) => setCalloutEditor({ ...calloutEditor, kind: event.target.value })} className="h-10 w-full rounded-xl border border-line bg-surface px-3"><option value="">Choose a service</option>{(calloutEditor.editingId ? [calloutEditor.kind] : availableCalloutsQuery.data?.callouts.find((item) => item.id === calloutEditor.calloutId)?.serviceKinds ?? []).filter((kind): kind is string => Boolean(kind) && (serviceCatalog.some((entry) => entry.kind === kind) || kind === calloutEditor.kind)).map((kind) => <option key={kind} value={kind}>{serviceCatalog.find((entry) => entry.kind === kind)?.name || kind.replaceAll("_", " ")}</option>)}</select></label>
+          <label className="block space-y-1 text-sm"><span className="font-medium">Offer description</span><Input required value={calloutEditor.description} onChange={(event) => setCalloutEditor({ ...calloutEditor, description: event.target.value })} /></label>
+          <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1 text-sm"><span className="font-medium">Price (minor units)</span><Input required type="number" min="0" step="1" value={calloutEditor.priceMinor} onChange={(event) => setCalloutEditor({ ...calloutEditor, priceMinor: event.target.value })} /></label><label className="block space-y-1 text-sm"><span className="font-medium">Currency</span><Input required minLength={3} maxLength={3} value={calloutEditor.currency} onChange={(event) => setCalloutEditor({ ...calloutEditor, currency: event.target.value.toUpperCase() })} /></label></div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setCalloutEditor(null)}>Cancel</Button><Button type="submit" disabled={saveCallout.isPending || (!calloutEditor.editingId && availableCalloutsQuery.isLoading)}>{saveCallout.isPending ? "Saving…" : "Save response"}</Button></DialogFooter>
+        </form>}
+      </DialogContent>
+    </Dialog>
+    <Dialog open={Boolean(deleteResponse)} onOpenChange={(open) => { if (!open) setDeleteResponse(null) }}><DialogContent><DialogHeader><DialogTitle>Delete callout response?</DialogTitle><DialogDescription>This removes the vendor’s application from the callout. Selected responses cannot be deleted.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDeleteResponse(null)}>Cancel</Button><Button variant="destructive" disabled={removeCallout.isPending} onClick={() => deleteResponse?.id && removeCallout.mutate(deleteResponse.id)}>{removeCallout.isPending ? "Deleting…" : "Delete response"}</Button></DialogFooter></DialogContent></Dialog>
   </section>;
 }
 

@@ -8,6 +8,8 @@ import { CommerceFeeRulesPage, CommercePayoutsPage, CommerceSettingsPage, Commer
 import { TicketVerificationPage } from '@/components/events/events-ticketing-pages'
 import { PlatformCountriesPage, PlatformKYBRequirementsPage, PlatformDistributionChannelsPage, PlatformEventCategoriesPage, PlatformSettingsPage, PlatformSponsorsPage, PlatformSubdivisionsPage } from '@/components/platform/platform-admin-pages'
 import { ModuleAnalyticsOverview } from '@/components/module-analytics-overview'
+import { AccountsKycReviewPage } from '@/components/accounts/kyc-review-page'
+import { PlatformVendorServicesPage } from '@/components/platform/vendor-service-catalog-page'
 
 const moduleLabels: Record<string, string> = {
   accounts: 'Accounts',
@@ -40,6 +42,7 @@ const resourceLabels: Record<string, string> = {
   subdivisions: 'Subdivisions',
   'distribution-channels': 'Distribution channels',
   'event-categories': 'Event categories',
+  'vendor-services': 'Vendor services',
   taxes: 'Tax rules',
   fees: 'Fee rules',
   commerce: 'Commerce settings',
@@ -76,6 +79,7 @@ export function AdminModulePage() {
   if (module === 'accounts' && section === 'org-users') return <AccountsOrganizationUsersPage />
   if (module === 'accounts' && section === 'venues') return <AccountsVenueOrganizationsPage />
   if (module === 'accounts' && section === 'vendors') return <AccountsVendorsPage />
+  if (module === 'accounts' && section === 'kyc') return <AccountsKycReviewPage />
   if (module === 'marketplace' && section === 'vendors') return <AccountsVendorsPage />
   if (module === 'marketplace' && section === 'venues') return <AccountsVenuesPage />
   if (module === 'marketplace' && section === 'claims') return <AccountsVenuesPage initialTab="claims" />
@@ -92,6 +96,7 @@ export function AdminModulePage() {
   if (module === 'platform' && section === 'subdivisions') return <PlatformSubdivisionsPage />
   if (module === 'platform' && section === 'distribution-channels') return <PlatformDistributionChannelsPage />
   if (module === 'platform' && section === 'event-categories') return <PlatformEventCategoriesPage />
+  if (module === 'platform' && section === 'vendor-services') return <PlatformVendorServicesPage />
   if (module === 'platform' && section === 'sponsors') return <PlatformSponsorsPage />
   if (module === 'commerce' && section === 'taxes') return <CommerceTaxRulesPage />
   if (module === 'commerce' && section === 'fees') return <CommerceFeeRulesPage />

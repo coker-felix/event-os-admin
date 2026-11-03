@@ -90,6 +90,7 @@ const itemIcons: Record<string, Icon> = {
   '/app/platform/subdivisions': MapTrifold,
   '/app/platform/distribution-channels': ShareNetwork,
   '/app/platform/event-categories': Tag,
+  '/app/platform/vendor-services': Tag,
   '/app/commerce/taxes': Percent,
   '/app/commerce/fees': Receipt,
   '/app/commerce/commerce': SlidersHorizontal,
@@ -197,6 +198,7 @@ const navigation: readonly AdminNavigationModule[] = [
       { label: 'Subdivisions', to: '/app/platform/subdivisions' },
       { label: 'Distribution channels', to: '/app/platform/distribution-channels' },
       { label: 'Event categories', to: '/app/platform/event-categories' },
+      { label: 'Vendor services', to: '/app/platform/vendor-services' },
     ],
   },
 ]
