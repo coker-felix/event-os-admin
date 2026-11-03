@@ -3,6 +3,7 @@ import { adminApiBaseUrl, authenticatedAdminFetch } from './admin-auth'
 export interface VendorDirectoryEntry {
   id: string
   accountId?: string | null
+  managingOrgId?: string | null
   businessName?: string | null
   contactName?: string | null
   email?: string | null
@@ -170,12 +171,12 @@ function normalizeRows<T extends { id: string }>(rows: Array<T | null> | null | 
   return Array.isArray(rows) ? rows.filter((row): row is T => Boolean(row && typeof row.id === 'string' && row.id)) : []
 }
 
-export async function listVendorDirectory(token: string) {
+export async function listAdminVendors(token: string) {
   const vendors: VendorDirectoryEntry[] = []
   let offset = 0
   let total: number | undefined
   do {
-    const response = await request<{ vendors?: Array<VendorDirectoryEntry | null> | null; total?: number | null }>(token, `/api/admin/vendors?status=active&limit=100&offset=${offset}`)
+    const response = await request<{ vendors?: Array<VendorDirectoryEntry | null> | null; total?: number | null }>(token, `/api/admin/vendors?limit=100&offset=${offset}`)
     const page = normalizeRows(response?.vendors)
     vendors.push(...page)
     total = typeof response?.total === 'number' ? response.total : undefined
@@ -220,7 +221,16 @@ export function updateVendorTier(token: string, id: string, tier: NonNullable<Ve
 }
 
 export function setVendorStatus(token: string, id: string, status: 'pending_approval' | 'active' | 'suspended') {
-  return request<{ status?: string | null }>(token, `/api/admin/vendors/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+  return request<VendorDirectoryEntry>(token, `/api/admin/vendors/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+}
+
+export function updateAdminVendorProfile(token: string, id: string, managingOrgId: string, input: {
+  businessName: string; contactName: string; email: string; phone: string; category: string;
+  city: string; country: string; description: string
+}) {
+  return request<VendorDirectoryEntry>(token, `/api/admin/vendors/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify({ ...input, managingOrgId }),
+  })
 }
 
 export function setVenueStatus(token: string, id: string, status: 'pending_approval' | 'active' | 'suspended') {

@@ -71,6 +71,7 @@ import {
   createDirectoryVenue,
   decideVenueClaim,
   getAdminVendor,
+  listAdminVendors,
   getOrganizationCommerceProfile,
   getVenueOwnershipHistory,
   listAdminOrganizations,
@@ -78,12 +79,12 @@ import {
   listPendingVenueClaims,
   listVenueDirectory,
   listVenueOrganizationReconciliation,
-  listVendorDirectory,
   listVendorCatalogServices,
   patchDirectoryVenue,
   resolveVenueOrganization,
   setVenueStatus,
   setVendorStatus,
+  updateAdminVendorProfile,
   updateVendorTier,
   type AdminVenueClaim,
   type AdminOrganization,
@@ -281,6 +282,7 @@ function DirectoryTable<T extends { id: string }>({
   columns,
   renderRow,
   label,
+  filters,
 }: {
   title: string;
   rows: T[];
@@ -293,6 +295,7 @@ function DirectoryTable<T extends { id: string }>({
   columns: string[];
   renderRow: (row: T) => React.ReactNode;
   label: string;
+  filters?: React.ReactNode;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -310,7 +313,8 @@ function DirectoryTable<T extends { id: string }>({
   );
   return (
     <>
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {filters}
         <Input
           aria-label={`Search ${label}`}
           placeholder={`Search ${label}`}
@@ -551,14 +555,14 @@ function ProfileStatusDialog({
   onClose,
 }: {
   kind: "vendor" | "venue";
-  profile: { id: string; name: string } | null;
+  profile: { id: string; name: string; status?: string | null; managingOrgId?: string | null } | null;
   onClose: () => void;
 }) {
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<
     "pending_approval" | "active" | "suspended"
-  >("suspended");
+  >(profile?.status === "suspended" ? "active" : "suspended");
   const mutation = useMutation({
     mutationFn: () =>
       kind === "vendor"
@@ -898,6 +902,13 @@ function CreateVendorSheet({
     enabled: Boolean(session?.token && open),
   });
   const configuredCountries = (countriesQuery.data?.countries ?? []).filter((item) => item.enabled);
+  const eligibleOrganizations = organizations.filter((organization) =>
+    Boolean(organization.ownerId?.trim()) &&
+    organization.status === "active" &&
+    organization.capabilities?.some((capability) =>
+      capability?.capability === "vend" && capability.status === "active" && capability.kybStatus === "approved",
+    ),
+  );
   const [managingOrgId, setManagingOrgId] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [contactName, setContactName] = useState("");
@@ -921,7 +932,7 @@ function CreateVendorSheet({
   const mutation = useMutation({
     mutationFn: () =>
       createAdminVendor(session!.token, {
-        accountId: organizations.find((organization) => organization.id === managingOrgId)?.ownerId?.trim() || "",
+        accountId: eligibleOrganizations.find((organization) => organization.id === managingOrgId)?.ownerId?.trim() || "",
         managingOrgId,
         businessName: businessName.trim(),
         ...(contactName.trim() ? { contactName: contactName.trim() } : {}),
@@ -969,22 +980,24 @@ function CreateVendorSheet({
               <select required value={managingOrgId} onChange={(event) => {
                 const id = event.target.value;
                 setManagingOrgId(id);
-                const organization = organizations.find((item) => item.id === id);
+                const organization = eligibleOrganizations.find((item) => item.id === id);
                 if (organization) {
                   setBusinessName(organization.name || "");
                   setEmail(organization.email || "");
                   setPhone(organization.phone || "");
                 }
-              }} disabled={organizationsLoading} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm">
-                <option value="">{organizationsLoading ? "Loading organizations…" : organizationsError ? "Organizations unavailable" : organizations.length ? "Choose a vendor organization" : "No vendor organizations available"}</option>
-                {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name || organization.id} · {organization.ownerId || "no owner"}</option>)}
+              }} aria-label="Vendor organization" disabled={organizationsLoading || eligibleOrganizations.length === 0} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm">
+                <option value="">{organizationsLoading ? "Loading organizations…" : organizationsError ? "Organizations unavailable" : eligibleOrganizations.length ? "Choose a vendor organization" : "No eligible vendor organizations"}</option>
+                {eligibleOrganizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name || organization.id} · {organization.ownerId}</option>)}
               </select>
               {organizationsError && <FieldDescription role="alert" className="text-danger">Could not load vendor organizations: {organizationsError}</FieldDescription>}
+              {!organizationsError && !organizationsLoading && eligibleOrganizations.length === 0 && <FieldDescription>Vendor capability must be active, KYB approved, and the organization owner must have vendor access before creating a profile.</FieldDescription>}
             </Field>
             <Field>
               <FieldLabel>Business name</FieldLabel>
               <Input
                 required
+                aria-label="Business name"
                 value={businessName}
                 onChange={(event) => setBusinessName(event.target.value)}
               />
@@ -992,6 +1005,7 @@ function CreateVendorSheet({
             <Field>
               <FieldLabel>Contact name (optional)</FieldLabel>
               <Input
+                aria-label="Contact name"
                 value={contactName}
                 onChange={(event) => setContactName(event.target.value)}
               />
@@ -1000,6 +1014,7 @@ function CreateVendorSheet({
               <FieldLabel>Email</FieldLabel>
               <Input
                 required
+                aria-label="Email"
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -1009,6 +1024,7 @@ function CreateVendorSheet({
             <Field>
               <FieldLabel>Phone (optional)</FieldLabel>
               <Input
+                aria-label="Phone"
                 autoComplete="tel"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
@@ -1017,6 +1033,7 @@ function CreateVendorSheet({
             <Field>
               <FieldLabel>Category (optional)</FieldLabel>
               <Input
+                aria-label="Category"
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
               />
@@ -1024,6 +1041,7 @@ function CreateVendorSheet({
             <Field>
               <FieldLabel>City (optional)</FieldLabel>
               <Input
+                aria-label="City"
                 value={city}
                 onChange={(event) => setCity(event.target.value)}
               />
@@ -1032,6 +1050,7 @@ function CreateVendorSheet({
               <FieldLabel>Country</FieldLabel>
               <select
                 required
+                aria-label="Country"
                 value={country}
                 onChange={(event) => setCountry(event.target.value)}
                 disabled={countriesQuery.isLoading || countriesQuery.isError || configuredCountries.length === 0}
@@ -1045,6 +1064,7 @@ function CreateVendorSheet({
             <Field>
               <FieldLabel>Description (optional)</FieldLabel>
               <textarea
+                aria-label="Description (optional)"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 rows={3}
@@ -1062,7 +1082,7 @@ function CreateVendorSheet({
             form="create-admin-vendor"
             disabled={
               mutation.isPending ||
-              !managingOrgId || !organizations.find((organization) => organization.id === managingOrgId)?.ownerId ||
+              !managingOrgId || !eligibleOrganizations.find((organization) => organization.id === managingOrgId)?.ownerId ||
               !businessName.trim() ||
               !email.trim() ||
               !country.trim()
@@ -1076,12 +1096,73 @@ function CreateVendorSheet({
   );
 }
 
+function VendorProfileEditSheet({
+  vendor,
+  onClose,
+}: {
+  vendor: VendorDirectoryEntry | null;
+  onClose: () => void;
+}) {
+  const { session } = useAuth();
+  const queryClient = useQueryClient();
+  const [businessName, setBusinessName] = useState(vendor?.businessName ?? "");
+  const [contactName, setContactName] = useState(vendor?.contactName ?? "");
+  const [email, setEmail] = useState(vendor?.email ?? "");
+  const [phone, setPhone] = useState(vendor?.phone ?? "");
+  const [category, setCategory] = useState(vendor?.category ?? "");
+  const [city, setCity] = useState(vendor?.city ?? "");
+  const [country, setCountry] = useState(vendor?.country ?? "");
+  const [description, setDescription] = useState(vendor?.description ?? "");
+  const mutation = useMutation({
+    mutationFn: () => updateAdminVendorProfile(session!.token, vendor!.id, vendor!.managingOrgId!, {
+      businessName: businessName.trim(), contactName: contactName.trim(), email: email.trim(), phone: phone.trim(),
+      category: category.trim(), city: city.trim(), country: country.trim(), description: description.trim(),
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: vendorKey });
+      onClose();
+    },
+  });
+  return (
+    <Sheet open={Boolean(vendor)} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent className="w-full overflow-y-auto sm:[&[data-side=right]]:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>Edit vendor profile</SheetTitle>
+          <SheetDescription>Update the business details shown to organizers and vendors.</SheetDescription>
+        </SheetHeader>
+        <form id="edit-admin-vendor" className="flex-1 overflow-y-auto px-6 pb-6" onSubmit={(event: FormEvent) => { event.preventDefault(); mutation.mutate(); }}>
+          <FieldGroup className="gap-3">
+            <Field><FieldLabel>Business name</FieldLabel><Input aria-label="Business name" required maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} /></Field>
+            <Field><FieldLabel>Contact name</FieldLabel><Input aria-label="Contact name" maxLength={160} value={contactName} onChange={(event) => setContactName(event.target.value)} /></Field>
+            <Field><FieldLabel>Email</FieldLabel><Input aria-label="Email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></Field>
+            <Field><FieldLabel>Phone</FieldLabel><Input aria-label="Phone" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></Field>
+            <Field><FieldLabel>Category</FieldLabel><Input aria-label="Category" maxLength={100} value={category} onChange={(event) => setCategory(event.target.value)} /></Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field><FieldLabel>City</FieldLabel><Input aria-label="City" maxLength={100} value={city} onChange={(event) => setCity(event.target.value)} /></Field>
+              <Field><FieldLabel>Country</FieldLabel><Input aria-label="Country" maxLength={80} value={country} onChange={(event) => setCountry(event.target.value)} /></Field>
+            </div>
+            <Field><FieldLabel>Description</FieldLabel><textarea aria-label="Description" maxLength={4000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></Field>
+            {!vendor?.managingOrgId && <FieldDescription role="alert" className="text-danger">This profile has no managing organization and cannot be edited here.</FieldDescription>}
+            {mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}
+          </FieldGroup>
+        </form>
+        <SheetFooter className="border-t border-line">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="edit-admin-vendor" disabled={mutation.isPending || !vendor?.managingOrgId || !businessName.trim() || (!email.trim() && !phone.trim())}>
+            {mutation.isPending ? "Saving…" : "Save changes"}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?: "directory" } = {}) {
   const { session } = useAuth();
   const navigate = useNavigate();
   const query = useQuery({
     queryKey: vendorKey,
-    queryFn: () => listVendorDirectory(session!.token),
+    queryFn: () => listAdminVendors(session!.token),
     enabled: Boolean(session?.token),
   });
   const organizationsQuery = useQuery({
@@ -1090,14 +1171,24 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [vendor, setVendor] = useState<VendorDirectoryEntry | null>(null);
+  const [editingVendor, setEditingVendor] = useState<VendorDirectoryEntry | null>(null);
   const [statusVendor, setStatusVendor] = useState<{
     id: string;
     name: string;
+    status?: string | null;
+    managingOrgId?: string | null;
   } | null>(null);
   const [createdVendorId, setCreatedVendorId] = useState<string | undefined>();
   const vendors = query.data?.vendors ?? [];
+  const categories = [...new Set(vendors.map((item) => item.category?.trim()).filter((category): category is string => Boolean(category)))].sort((a, b) => a.localeCompare(b));
+  const filteredVendors = vendors.filter((item) =>
+    (statusFilter === "all" || item.status === statusFilter) &&
+    (categoryFilter === "all" || item.category === categoryFilter),
+  );
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -1106,7 +1197,7 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
             Vendor Profiles
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Browse active public listings and manage their directory tier.The public directory shows active vendors only.
+            Review vendor profiles across onboarding and trading, update business details, and manage listing status.
           </p>
         </div>
         <Button
@@ -1131,16 +1222,30 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
       <Tabs defaultValue={initialTab} className="gap-5">
         <TabsContent value="directory" className="flex flex-col gap-5">
           <DirectoryTable
-            title="Active vendor directory"
-            rows={vendors}
+            title="Vendor profiles"
+            rows={filteredVendors}
             isLoading={query.isLoading}
             error={query.isError ? query.error.message : null}
             search={search}
             onSearch={setSearch}
-            emptyTitle="No active vendor listings"
-            emptyMessage="Add a vendor or wait for an active vendor to appear."
-            columns={["Vendor", "Contact", "Email", "Phone", "Category", "Location", "Tier", "Actions"]}
-            label="vendors"
+            emptyTitle={vendors.length ? "No vendors match these filters" : "No vendor profiles"}
+            emptyMessage={vendors.length ? "Try another status or category." : "Add a vendor profile to begin managing onboarding and directory access."}
+            columns={["Vendor", "Contact", "Email", "Phone", "Category", "Location", "Status", "Tier", "Actions"]}
+            label="vendor profiles"
+            filters={<div className="flex flex-wrap gap-2">
+              <select aria-label="Filter vendor profiles by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm">
+                <option value="all">All statuses</option>
+                <option value="pending_approval">Pending approval</option>
+                <option value="pending_contract">Pending contract</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="deactivated">Deactivated</option>
+              </select>
+              <select aria-label="Filter vendor profiles by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-10 rounded-lg border border-line bg-surface px-3 text-sm">
+                <option value="all">All categories</option>
+                {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </div>}
             renderRow={(item) => (
               <TableRow key={item.id}>
                 <TableCell>
@@ -1154,6 +1259,7 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
                 <TableCell>{item.phone || "—"}</TableCell>
                 <TableCell>{item.category || "—"}</TableCell>
                 <TableCell>{[item.city, item.country].filter(Boolean).join(", ") || "—"}</TableCell>
+                <TableCell><OrganizationMemberStatus status={item.status} /></TableCell>
                 <TableCell>
                   {item.tier === "partnered" ? (
                     <Badge className="bg-brand-soft text-brand">
@@ -1181,8 +1287,15 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
                         setStatusVendor({
                           id: item.id,
                           name: item.businessName || "vendor",
+                          status: item.status,
+                          managingOrgId: item.managingOrgId,
                         })
                       }
+                    />
+                    <AppIconAction
+                      label={`Edit profile for ${item.businessName || "vendor"}`}
+                      icon={<PencilSimple aria-hidden="true" />}
+                      onClick={() => setEditingVendor(item)}
                     />
                     <AppIconAction
                       label={`Change directory tier for ${item.businessName || "vendor"}`}
@@ -1200,6 +1313,11 @@ export function AccountsVendorsPage({ initialTab = "directory" }: { initialTab?:
         key={vendor?.id ?? "no-vendor"}
         vendor={vendor}
         onClose={() => setVendor(null)}
+      />
+      <VendorProfileEditSheet
+        key={editingVendor?.id ?? "no-edit-vendor"}
+        vendor={editingVendor}
+        onClose={() => setEditingVendor(null)}
       />
       <ProfileStatusDialog
         key={statusVendor?.id ?? "no-vendor-status"}
@@ -1230,6 +1348,8 @@ function displayVendorServicePrice(minor?: number | string | null, currency?: st
 
 export function VendorDetailsPage({ vendorId }: { vendorId: string }) {
   const [activeSection, setActiveSection] = useState<"profile" | "services" | "callouts" | "bookings">("profile");
+  const [editOpen, setEditOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
   const { session } = useAuth();
   const navigate = useNavigate();
   const vendorQuery = useQuery({
@@ -1253,10 +1373,16 @@ export function VendorDetailsPage({ vendorId }: { vendorId: string }) {
   } as const;
 
   return <section className="space-y-6">
-    <div>
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
       <Button variant="ghost" className="mb-2 px-0" onClick={() => void navigate({ to: "/app/accounts/vendors" as never })}>← Vendors</Button>
       <h1 className="text-xl font-semibold tracking-tight">{vendor?.businessName || "Vendor profile"}</h1>
       <p className="mt-1 max-w-2xl text-sm text-ink-muted">Vendor profile details and listed services.</p>
+      </div>
+      {vendor && <div className="flex gap-2">
+        <Button variant="outline" onClick={() => setStatusOpen(true)}>Change status</Button>
+        <Button onClick={() => setEditOpen(true)} disabled={vendor.status === "deactivated"}>Edit profile</Button>
+      </div>}
     </div>
     {vendorQuery.isLoading ? <Card><CardContent className="py-10 text-center text-sm text-ink-muted">Loading vendor profile…</CardContent></Card>
       : vendorQuery.isError ? <ErrorMessage>{vendorQuery.error.message}</ErrorMessage>
@@ -1309,6 +1435,8 @@ export function VendorDetailsPage({ vendorId }: { vendorId: string }) {
             {activeSection === "bookings" && <Card><CardHeader><CardTitle>Bookings</CardTitle></CardHeader><CardContent><p className="text-sm text-ink-muted">Vendor bookings are not available through the admin API yet.</p></CardContent></Card>}
             </div>
           </div>}
+    <VendorProfileEditSheet key={`${vendor?.id ?? "no-vendor"}-detail-edit-${editOpen}`} vendor={editOpen ? vendor ?? null : null} onClose={() => setEditOpen(false)} />
+    <ProfileStatusDialog key={`${vendor?.id ?? "no-vendor"}-detail-status-${statusOpen}`} kind="vendor" profile={statusOpen && vendor ? { id: vendor.id, name: vendor.businessName || "vendor", status: vendor.status, managingOrgId: vendor.managingOrgId } : null} onClose={() => setStatusOpen(false)} />
   </section>;
 }
 
