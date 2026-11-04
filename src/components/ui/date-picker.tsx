@@ -15,6 +15,8 @@ export interface AppDatePickerProps {
   onValueChange: (value: ISODate | null) => void
   minDate?: ISODate
   placeholder?: string
+  /** Accessible name for the date trigger, especially when several pickers share a form. */
+  ariaLabel?: string
   disabled?: boolean
   className?: string
 }
@@ -24,6 +26,7 @@ export function AppDatePicker({
   onValueChange,
   minDate,
   placeholder = 'Pick a date',
+  ariaLabel,
   disabled,
   className,
 }: AppDatePickerProps) {
@@ -36,6 +39,7 @@ export function AppDatePicker({
         render={
           <Button
             variant="outline"
+            aria-label={ariaLabel}
             data-empty={!value}
             className={cn("justify-start text-left font-normal data-[empty=true]:text-muted-foreground", className)}
           />

@@ -45,6 +45,29 @@ export interface AdminTicketType {
   status?: string | null
   saleStartAt?: UnixSeconds | null
   saleEndAt?: UnixSeconds | null
+  attributes?: Record<string, string> | null
+}
+
+export interface AdminCoupon {
+  id: string
+  orgId?: string | null
+  eventId?: string | null
+  code?: string | null
+  discountType?: 'percent' | 'flat_minor' | string | null
+  value?: Int64Value | null
+  maxUses?: Int64Value | null
+  usedCount?: Int64Value | null
+  validFrom?: UnixSeconds | null
+  validUntil?: UnixSeconds | null
+  status?: 'active' | 'disabled' | string | null
+}
+
+export interface AdminEventPublication {
+  id: string
+  eventId?: string | null
+  distributionChannelKey?: string | null
+  status?: string | null
+  lastError?: string | null
 }
 
 export interface AdminOrder {
@@ -141,6 +164,16 @@ export interface AdminTicketTypeInput {
   saleStartAt?: number
   saleEndAt?: number
   status?: string
+  attributes?: Record<string, string>
+}
+
+export interface AdminCouponInput {
+  code: string
+  discountType: 'percent' | 'flat_minor'
+  value: number
+  maxUses?: number
+  validFrom?: number
+  validUntil?: number
 }
 
 export interface PublicEvent {
@@ -164,6 +197,7 @@ export interface PublicEvent {
 export interface PublicTicketType {
   id: string
   name?: string | null
+  description?: string | null
   available?: string | number | null
   supplyKind?: string | null
   admissionsPerUnit?: string | number | null
@@ -271,6 +305,24 @@ export function getAdminEvent(token: string, eventId: string) {
   return request<{ event?: AdminEvent | null; ticketTypes?: Array<AdminTicketType | null> | null }>(token, `/api/admin/events/${encodeURIComponent(eventId)}`)
 }
 
+export async function uploadAdminEventImage(token: string, orgId: string, kind: 'logo' | 'banner', file: File) {
+  const form = new FormData()
+  form.set('kind', kind)
+  form.set('file', file)
+  const response = await authenticatedAdminFetch(token, `${adminApiBaseUrl}/api/admin/organizations/${encodeURIComponent(orgId)}/event-images`, { method: 'POST', body: form })
+  const payload: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+      ? payload.error
+      : `Image upload failed (${response.status}).`
+    throw new Error(message)
+  }
+  if (typeof payload !== 'object' || payload === null || !('url' in payload) || typeof payload.url !== 'string') {
+    throw new Error('Image upload succeeded without returning a public URL.')
+  }
+  return { url: payload.url }
+}
+
 export function createAdminEvent(token: string, orgId: string, input: AdminEventInput) {
   return request<AdminEvent>(token, `/api/admin/organizations/${encodeURIComponent(orgId)}/events`, { method: 'POST', body: JSON.stringify(input) })
 }
@@ -283,8 +335,50 @@ export function updateAdminEvent(token: string, eventId: string, input: AdminEve
   return request<AdminEvent>(token, `/api/admin/events/${encodeURIComponent(eventId)}`, { method: 'PATCH', body: JSON.stringify(input) })
 }
 
+export function updateAdminEventBranding(token: string, eventId: string, input: Pick<AdminEventInput, 'logoUrl' | 'heroImageUrl' | 'accentColor' | 'promoTagline'>) {
+  return request<AdminEvent>(token, `/api/admin/events/${encodeURIComponent(eventId)}/branding`, { method: 'PUT', body: JSON.stringify(input) })
+}
+
 export function publishAdminEvent(token: string, eventId: string) {
   return request<AdminEvent>(token, `/api/admin/events/${encodeURIComponent(eventId)}/publish`, { method: 'POST' })
+}
+
+export async function listAdminEventCoupons(token: string, eventId: string) {
+  const response = await request<{ coupons?: Array<AdminCoupon | null> | null }>(token, `/api/admin/events/${encodeURIComponent(eventId)}/coupons`)
+  return { coupons: Array.isArray(response?.coupons) ? response.coupons.filter((coupon): coupon is AdminCoupon => Boolean(coupon?.id)) : [] }
+}
+
+export function createAdminEventCoupon(token: string, eventId: string, input: AdminCouponInput) {
+  return request<AdminCoupon>(token, `/api/admin/events/${encodeURIComponent(eventId)}/coupons`, { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function setAdminEventCouponStatus(token: string, eventId: string, couponId: string, status: 'active' | 'disabled') {
+  return request<AdminCoupon>(token, `/api/admin/events/${encodeURIComponent(eventId)}/coupons/${encodeURIComponent(couponId)}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+}
+
+export async function listAdminEventPublications(token: string, eventId: string) {
+  const response = await request<{ publications?: Array<AdminEventPublication | null> | null }>(token, `/api/admin/events/${encodeURIComponent(eventId)}/publications`)
+  return { publications: Array.isArray(response?.publications) ? response.publications.filter((publication): publication is AdminEventPublication => Boolean(publication?.id)) : [] }
+}
+
+export function publishAdminEventToChannel(token: string, eventId: string, channelKey: string) {
+  return request<AdminEventPublication>(token, `/api/admin/events/${encodeURIComponent(eventId)}/publications/${encodeURIComponent(channelKey)}`, { method: 'POST' })
+}
+
+export function unpublishAdminEventFromChannel(token: string, eventId: string, channelKey: string) {
+  return request<AdminEventPublication>(token, `/api/admin/events/${encodeURIComponent(eventId)}/publications/${encodeURIComponent(channelKey)}`, { method: 'DELETE' })
+}
+
+export function retryAdminEventPublication(token: string, eventId: string, channelKey: string) {
+  return request<AdminEventPublication>(token, `/api/admin/events/${encodeURIComponent(eventId)}/publications/${encodeURIComponent(channelKey)}/retry`, { method: 'POST' })
+}
+
+export function getAdminEventFeeOverride(token: string, eventId: string) {
+  return request<{ orgId?: string; feePayerOverride?: string; effectiveFeePayer?: string }>(token, `/api/admin/events/${encodeURIComponent(eventId)}/fee-override`)
+}
+
+export function setAdminEventFeeOverride(token: string, eventId: string, feePayer: '' | 'attendee' | 'organizer') {
+  return request<{ orgId?: string; feePayerOverride?: string; effectiveFeePayer?: string }>(token, `/api/admin/events/${encodeURIComponent(eventId)}/fee-override`, { method: 'PUT', body: JSON.stringify({ feePayer }) })
 }
 
 export async function listAdminTicketTypes(token: string, eventId: string) {

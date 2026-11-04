@@ -17,12 +17,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { FilterTabs } from '@/components/ui/filter-tabs'
+import { EventCouponsPanel, EventFeeOverridePanel, EventPublishingChannelsPanel, EventVendorCalloutsPanel } from '@/components/events/event-management-panels'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { formatDate } from '@/lib/date-format'
 import { listAdminOrganizations, listVenueDirectory, getAdminVenue, type AdminOrganization, type VenueDirectoryEntry } from '@/services/admin-account-directory'
-import { listCountries, listEventCategories, type EventCategory, type SupportedCountry } from '@/services/admin-platform'
+import { listCountries, listDistributionChannels, listEventCategories, type DistributionChannel, type EventCategory, type SupportedCountry } from '@/services/admin-platform'
 import {
-  createAdminEvent, createAdminRecurringEvents, createAdminTicketType, deleteAdminTicketType, getAdminEvent, listAdminEventOrders, listAdminEvents, listAdminTicketTypes, publishAdminEvent, updateAdminEvent, updateAdminTicketType,
+  createAdminEvent, createAdminRecurringEvents, createAdminTicketType, deleteAdminTicketType, getAdminEvent, listAdminEventOrders, listAdminEvents, listAdminTicketTypes, publishAdminEvent, updateAdminEvent, updateAdminEventBranding, updateAdminTicketType, uploadAdminEventImage,
   type AdminEvent, type AdminEventInput, type AdminRecurringEventsInput, type AdminOrder, type AdminTicketType, type AdminTicketTypeInput,
 } from '@/services/admin-events-ticketing'
 
@@ -175,6 +176,8 @@ function EventForm({
   const [description, setDescription] = useState(event?.description || '')
   const [logoUrl, setLogoUrl] = useState(event?.logoUrl || '')
   const [heroImageUrl, setHeroImageUrl] = useState(event?.heroImageUrl || '')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [bannerFile, setBannerFile] = useState<File | null>(null)
   const [accentColor, setAccentColor] = useState(event?.accentColor || '')
   const [promoTagline, setPromoTagline] = useState(event?.promoTagline || '')
   const [donationsEnabled, setDonationsEnabled] = useState(event?.donationsEnabled ?? false)
@@ -220,14 +223,35 @@ function EventForm({
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: async (input: AdminEventInput | AdminRecurringEventsInput) => {
-      if (event) return updateAdminEvent(session!.token, event.id, input as AdminEventInput)
+      let preparedInput = input
+      if (logoFile || bannerFile) {
+        if (!event && recurring) throw new Error('Image uploads are not supported for recurring series yet.')
+        const uploadOrgId = event?.orgId || orgId
+        if (!uploadOrgId) throw new Error('The event organization is required to upload images.')
+        const [logo, banner] = await Promise.all([
+          logoFile ? uploadAdminEventImage(session!.token, uploadOrgId, 'logo', logoFile) : Promise.resolve(null),
+          bannerFile ? uploadAdminEventImage(session!.token, uploadOrgId, 'banner', bannerFile) : Promise.resolve(null),
+        ])
+        preparedInput = { ...input, ...(logo ? { logoUrl: logo.url } : {}), ...(banner ? { heroImageUrl: banner.url } : {}) }
+      }
+      if (event) {
+        const eventInput = preparedInput as AdminEventInput
+        const saved = await updateAdminEvent(session!.token, event.id, eventInput)
+        await updateAdminEventBranding(session!.token, event.id, {
+          logoUrl: eventInput.logoUrl ?? logoUrl,
+          heroImageUrl: eventInput.heroImageUrl ?? heroImageUrl,
+          accentColor: eventInput.accentColor ?? accentColor,
+          promoTagline: eventInput.promoTagline ?? promoTagline,
+        })
+        return saved
+      }
       if (recurring) {
-        const result = await createAdminRecurringEvents(session!.token, orgId, input as AdminRecurringEventsInput)
+        const result = await createAdminRecurringEvents(session!.token, orgId, preparedInput as AdminRecurringEventsInput)
         const firstEvent = result.events?.find((row): row is AdminEvent => Boolean(row?.id))
         if (!firstEvent) throw new Error('The recurring event request succeeded but returned no events.')
         return firstEvent
       }
-      return createAdminEvent(session!.token, orgId, input as AdminEventInput)
+      return createAdminEvent(session!.token, orgId, preparedInput as AdminEventInput)
     },
     onSuccess: async (saved) => {
       await Promise.all([queryClient.invalidateQueries({ queryKey: eventsKey }), queryClient.invalidateQueries({ queryKey: eventKey(saved.id) })])
@@ -290,6 +314,8 @@ function EventForm({
     setDescription(event?.description || '')
     setLogoUrl(event?.logoUrl || '')
     setHeroImageUrl(event?.heroImageUrl || '')
+    setLogoFile(null)
+    setBannerFile(null)
     setAccentColor(event?.accentColor || '')
     setPromoTagline(event?.promoTagline || '')
     setDonationsEnabled(event?.donationsEnabled ?? false)
@@ -349,8 +375,8 @@ function EventForm({
         </div>}
       </TabsContent>}
       <TabsContent value="schedule" className="event-form-tab-panel space-y-4 pb-6">
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Starts on<RequiredAsterisk /><div><AppDatePicker className="w-full" value={startsOn} minDate={!event ? todayISODate() : undefined} onValueChange={(value) => { setStartsOn(value); if (value && endsOn && endsOn < value) setEndsOn(value) }} /></div></label><label className="block space-y-2.5 text-sm font-medium">Start time<RequiredAsterisk /><input type="time" value={startsTime} onChange={(e) => setStartsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Ends on<RequiredAsterisk /><div><AppDatePicker className="w-full" value={endsOn} minDate={startsOn || todayISODate()} onValueChange={setEndsOn} /></div></label><label className="block space-y-2.5 text-sm font-medium">End time<RequiredAsterisk /><input type="time" value={endsTime} onChange={(e) => setEndsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Starts on<RequiredAsterisk /><div><AppDatePicker ariaLabel="Starts on" className="w-full" value={startsOn} minDate={!event ? todayISODate() : undefined} onValueChange={(value) => { setStartsOn(value); if (value && endsOn && endsOn < value) setEndsOn(value) }} /></div></label><label className="block space-y-2.5 text-sm font-medium">Start time<RequiredAsterisk /><input type="time" value={startsTime} onChange={(e) => setStartsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><label className="block space-y-2.5 text-sm font-medium">Ends on<RequiredAsterisk /><div><AppDatePicker ariaLabel="Ends on" className="w-full" value={endsOn} minDate={startsOn || todayISODate()} onValueChange={setEndsOn} /></div></label><label className="block space-y-2.5 text-sm font-medium">End time<RequiredAsterisk /><input type="time" value={endsTime} onChange={(e) => setEndsTime(e.target.value)} required className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label></div>
         {startsOn && <p className="text-xs text-ink-muted">Starts {formatDate(startsOn)}{startsTime ? ` at ${startsTime}` : ''}; saved in the selected timezone.</p>}
       </TabsContent>
       <TabsContent value="location" className="event-form-tab-panel space-y-4 pb-6">
@@ -359,10 +385,10 @@ function EventForm({
         <div className="grid gap-4 sm:grid-cols-2"><SearchableOptionField label="Country" value={countryCode} onChange={setCountryCode} options={countryOptions} emptyOption={{ value: '', label: 'No country selected' }} placeholder="Select a country" searchPlaceholder="Search configured countries…" emptyMessage="No countries match your search." loading={countriesQuery.isLoading} error={countriesQuery.isError ? countriesQuery.error.message : undefined} /><label className="block space-y-2.5 text-sm font-medium">Subdivision code<Input value={subdivisionCode} onChange={(e) => setSubdivisionCode(e.target.value.toUpperCase())} placeholder="GH-AA" /></label></div>
       </TabsContent>
       <TabsContent value="branding" className="event-form-tab-panel space-y-4 pb-6">
-        <label className="block space-y-2.5 text-sm font-medium">Logo<Input type="file" accept="image/*" disabled aria-describedby="branding-upload-status" /></label>
-        <label className="block space-y-2.5 text-sm font-medium">Banner image<Input type="file" accept="image/*" disabled aria-describedby="branding-upload-status" /></label>
+        <label className="block space-y-2.5 text-sm font-medium">Logo<Input type="file" accept="image/png,image/jpeg" disabled={!event && recurring} onChange={(e) => setLogoFile(e.target.files?.[0] || null)} aria-describedby="branding-upload-status" />{logoFile && <span className="block text-xs font-normal text-ink-muted">Selected: {logoFile.name}</span>}</label>
+        <label className="block space-y-2.5 text-sm font-medium">Banner image<Input type="file" accept="image/png,image/jpeg" disabled={!event && recurring} onChange={(e) => setBannerFile(e.target.files?.[0] || null)} aria-describedby="branding-upload-status" />{bannerFile && <span className="block text-xs font-normal text-ink-muted">Selected: {bannerFile.name}</span>}</label>
         <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2.5 text-sm font-medium">Accent color<div className="flex gap-2"><Input type="color" aria-label="Choose accent color" value={/^#[0-9a-fA-F]{6}$/.test(accentColor) ? accentColor : '#2563EB'} onChange={(e) => setAccentColor(e.target.value)} className="w-14 p-1" /><Input value={accentColor} onChange={(e) => setAccentColor(e.target.value)} placeholder="#2563EB" maxLength={7} /></div></label><label className="block space-y-2.5 text-sm font-medium">Promo tagline<Input value={promoTagline} onChange={(e) => setPromoTagline(e.target.value)} maxLength={200} /></label></div>
-        <p id="branding-upload-status" role="status" className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">Image uploads are unavailable until the admin API provides a media upload endpoint. Branding fields are also not yet saved by the current admin API.</p>
+        <p id="branding-upload-status" role="status" className="rounded-lg bg-surface-subtle px-3 py-2 text-sm text-ink-muted">PNG and JPEG images up to 10 MiB are uploaded to event storage when you save. Recurring series do not support image uploads yet.</p>
       </TabsContent>
       <TabsContent value="donations" className="event-form-tab-panel space-y-4 pb-6">
         <label className="flex items-center justify-between gap-3 text-sm font-medium">Enable donations<input type="checkbox" checked={donationsEnabled} onChange={(e) => setDonationsEnabled(e.target.checked)} className="size-4 accent-brand" /></label>
@@ -398,6 +424,7 @@ function TicketTypeEditor({ eventId, ticket, currency, onDone }: { eventId: stri
   const { session } = useAuth()
   const client = useQueryClient()
   const [name, setName] = useState(ticket?.name || '')
+  const [description, setDescription] = useState(ticket?.attributes?.description || '')
   const [price, setPrice] = useState(ticket?.priceMinor === null || ticket?.priceMinor === undefined ? '' : String(ticket.priceMinor))
   const [total, setTotal] = useState(ticket?.total === null || ticket?.total === undefined ? '' : String(ticket.total))
   const saleStart = eventDateParts(ticket?.saleStartAt)
@@ -411,9 +438,12 @@ function TicketTypeEditor({ eventId, ticket, currency, onDone }: { eventId: stri
     mutationFn: () => {
       const saleStartAt = toUnixSeconds(saleStartsOn, saleStartsTime)
       const saleEndAt = toUnixSeconds(saleEndsOn, saleEndsTime)
+      const attributes = { ...(ticket?.attributes || {}) }
+      attributes.description = description.trim()
       const input: AdminTicketTypeInput = {
         name: name.trim(), priceMinor: Number(price), total: Number(total),
         ...(saleStartAt !== null ? { saleStartAt } : {}), ...(saleEndAt !== null ? { saleEndAt } : {}),
+        attributes,
         ...(ticketStatus ? { status: ticketStatus } : {}),
       }
       return ticket ? updateAdminTicketType(session!.token, eventId, ticket.id, input) : createAdminTicketType(session!.token, eventId, input)
@@ -425,6 +455,7 @@ function TicketTypeEditor({ eventId, ticket, currency, onDone }: { eventId: stri
     <SheetHeader><SheetTitle>{ticket ? 'Edit ticket type' : 'Add ticket type'}</SheetTitle><SheetDescription>Set ticket inventory, price, and sales window for this event.</SheetDescription></SheetHeader>
     <form id="ticket-type-editor" className="flex-1 space-y-4 overflow-y-auto px-6 pb-6" onSubmit={(e) => { e.preventDefault(); mutation.mutate() }}>
       <label className="block space-y-1.5 text-sm font-medium">Ticket type name<Input required value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <label className="block space-y-1.5 text-sm font-medium">Description / what’s included<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} maxLength={2000} placeholder="Describe the access, benefits, or items included with this ticket." className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand" /></label>
       <label className="block space-y-1.5 text-sm font-medium">Price ({currency || 'event currency'} minor units)<Input type="number" min="0" step="1" required value={price} onChange={(e) => setPrice(e.target.value)} /></label>
       <label className="block space-y-1.5 text-sm font-medium">Quantity<Input type="number" min={Number(ticket?.sold ?? 0)} step="1" required value={total} onChange={(e) => setTotal(e.target.value)} /></label>
       <label className="block space-y-1.5 text-sm font-medium">Sales start date<div><AppDatePicker value={saleStartsOn} onValueChange={setSaleStartsOn} placeholder="No start limit" /></div></label>
@@ -465,17 +496,20 @@ export function AdminEventDetailsPage({ eventId }: { eventId: string }) {
     {detailsQuery.isLoading ? <p className="py-8 text-center text-sm text-ink-muted">Loading event…</p> : detailsQuery.isError ? <ErrorMessage>{detailsQuery.error.message}</ErrorMessage> : event ? <div className="space-y-6">
       <Card><CardContent className="flex flex-wrap items-center justify-between gap-5 pt-6"><div className="flex flex-wrap items-center gap-x-6 gap-y-3"><div className="flex items-center gap-3">{statusBadge(event.status)}<span className="text-sm text-ink-muted">Organization {event.orgId || 'unavailable'}</span></div><div><p className="text-xs text-ink-muted">Starts</p><p className="mt-1 text-sm font-medium">{displayDateTime(event.startsAt, event.timezone)}</p></div><div><p className="text-xs text-ink-muted">Ends</p><p className="mt-1 text-sm font-medium">{displayDateTime(event.endsAt, event.timezone)}</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setEditing((value) => !value); setTicketEditor(undefined) }}>{editing ? 'Close editor' : 'Edit event'}</Button>{event.status === 'draft' && <Button disabled={publish.isPending} onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish event'}</Button>}</div></CardContent></Card>
       <Tabs value={activeSection} onValueChange={(value) => setActiveSection(String(value))}>
-        <TabsList variant="line" aria-label="Event management sections" className="w-full justify-start overflow-x-auto"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="tickets">Ticket types</TabsTrigger><TabsTrigger value="orders">Orders</TabsTrigger><TabsTrigger value="venue">Venue</TabsTrigger><TabsTrigger value="coupons">Coupons</TabsTrigger><TabsTrigger value="fees">Fee overrides</TabsTrigger><TabsTrigger value="channels">Publish channels</TabsTrigger></TabsList>
+        <TabsList variant="line" aria-label="Event management sections" className="w-full justify-start overflow-x-auto"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="tickets">Ticket types</TabsTrigger><TabsTrigger value="orders">Orders</TabsTrigger><TabsTrigger value="venue">Venue</TabsTrigger><TabsTrigger value="callouts">Vendor callouts</TabsTrigger><TabsTrigger value="coupons">Coupons</TabsTrigger><TabsTrigger value="fees">Fee overrides</TabsTrigger><TabsTrigger value="channels">Publish channels</TabsTrigger></TabsList>
         <TabsContent value="overview" className="space-y-5">
-          {editing ? <Sheet open onOpenChange={(open) => { if (!open) setEditing(false) }}><SheetContent className="w-full overflow-y-auto sm:max-w-4xl"><SheetHeader><SheetTitle>Edit event</SheetTitle><SheetDescription>Update the event details and schedule.</SheetDescription></SheetHeader><EventForm event={event} organizations={[]} onSaved={() => setEditing(false)} /></SheetContent></Sheet> : <Card><CardContent className="pt-6"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-xs text-ink-muted">Starts</dt><dd className="mt-1 text-sm">{displayDateTime(event.startsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Ends</dt><dd className="mt-1 text-sm">{displayDateTime(event.endsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Venue</dt><dd className="mt-1 text-sm">{venueQuery.data?.name || event.venueId || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Attendance</dt><dd className="mt-1 text-sm">{event.attendanceType || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Currency</dt><dd className="mt-1 text-sm">{event.currency || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Visibility</dt><dd className="mt-1 text-sm">{event.visibility || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Category</dt><dd className="mt-1 text-sm">{event.categoryId ?? 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Country</dt><dd className="mt-1 text-sm">{event.countryCode || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Slug</dt><dd className="mt-1 break-all text-sm">{event.customSlug || 'Not provided'}</dd></div></dl>{event.description && <p className="mt-5 whitespace-pre-wrap border-t border-line pt-4 text-sm leading-6 text-ink-muted">{event.description}</p>}</CardContent></Card>}
+          {editing ? <Sheet open onOpenChange={(open) => { if (!open) setEditing(false) }}><SheetContent className="w-full overflow-y-auto sm:!max-w-6xl"><SheetHeader><SheetTitle>Edit event</SheetTitle><SheetDescription>Update the event details and schedule.</SheetDescription></SheetHeader><EventForm event={event} organizations={[]} onSaved={() => setEditing(false)} /></SheetContent></Sheet> : <Card><CardContent className="pt-6"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-xs text-ink-muted">Starts</dt><dd className="mt-1 text-sm">{displayDateTime(event.startsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Ends</dt><dd className="mt-1 text-sm">{displayDateTime(event.endsAt, event.timezone)}</dd></div><div><dt className="text-xs text-ink-muted">Venue</dt><dd className="mt-1 text-sm">{venueQuery.data?.name || event.venueId || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Attendance</dt><dd className="mt-1 text-sm">{event.attendanceType || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Currency</dt><dd className="mt-1 text-sm">{event.currency || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Visibility</dt><dd className="mt-1 text-sm">{event.visibility || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Category</dt><dd className="mt-1 text-sm">{event.categoryId ?? 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Country</dt><dd className="mt-1 text-sm">{event.countryCode || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Slug</dt><dd className="mt-1 break-all text-sm">{event.customSlug || 'Not provided'}</dd></div></dl>{event.description && <p className="mt-5 whitespace-pre-wrap border-t border-line pt-4 text-sm leading-6 text-ink-muted">{event.description}</p>}</CardContent></Card>}
         </TabsContent>
         <TabsContent value="tickets" className="space-y-4">
-      <Card className="gap-0 py-0"><CardContent className="p-0">{ticketEditor === undefined && <div className="flex justify-end p-4"><Button onClick={() => setTicketEditor(null)}>Add ticket type</Button></div>}<DataTable data={visibleTickets} headers={['Ticket type', { label: 'Price', className: 'text-right' }, { label: 'Sold / total', className: 'text-right' }, 'Status', { label: 'Actions', className: 'text-right' }]} label="Event ticket types" loading={ticketsQuery.isLoading} loadingMessage="Loading ticket types…" error={ticketsQuery.isError ? ticketsQuery.error.message : null} emptyMessage="No ticket types yet. Add a ticket type before publishing." pagination={{ pageIndex: ticketPage, pageSize: ticketPageSize, totalItems: tickets.length, onPageChange: (next) => setTicketPage(Math.min(next, ticketPageCount - 1)), onPageSizeChange: (size) => { setTicketPageSize(size); setTicketPage(0) } }} renderRow={(ticket) => <TableRow key={ticket.id}><TableCell><span className="font-medium">{ticket.name || 'Unnamed ticket type'}</span><span className="mt-0.5 block text-xs text-ink-muted">{ticket.id}</span></TableCell><TableCell className="text-right tabular-nums">{formatMinor(ticket.priceMinor, event.currency)}</TableCell><TableCell className="text-right tabular-nums">{ticket.sold ?? 0} / {ticket.total ?? '—'}</TableCell><TableCell>{ticket.status || 'Unknown'}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label={`Edit ${ticket.name || 'ticket type'}`} icon={<span aria-hidden="true">✎</span>} onClick={() => setTicketEditor(ticket)} /><AppIconAction label={`Delete ${ticket.name || 'ticket type'}`} icon={<span aria-hidden="true">×</span>} disabled={removeTicket.isPending || Number(ticket.sold ?? 0) > 0} onClick={() => { if (window.confirm('Delete this unsold ticket type?')) removeTicket.mutate(ticket.id) }} /></div></TableCell></TableRow>} containerClassName="" />{removeTicket.isError && <div className="px-5 py-3"><ErrorMessage>{removeTicket.error.message}</ErrorMessage></div>}</CardContent></Card>
+      <Card className="gap-0 py-0"><CardContent className="p-0">{ticketEditor === undefined && <div className="flex justify-end p-4"><Button onClick={() => setTicketEditor(null)}>Add ticket type</Button></div>}<DataTable data={visibleTickets} headers={['Ticket type', { label: 'Price', className: 'text-right' }, { label: 'Sold / total', className: 'text-right' }, 'Sales start', 'Sales end', 'Status', { label: 'Actions', className: 'text-right' }]} label="Event ticket types" loading={ticketsQuery.isLoading} loadingMessage="Loading ticket types…" error={ticketsQuery.isError ? ticketsQuery.error.message : null} emptyMessage="No ticket types yet. Add a ticket type before publishing." pagination={{ pageIndex: ticketPage, pageSize: ticketPageSize, totalItems: tickets.length, onPageChange: (next) => setTicketPage(Math.min(next, ticketPageCount - 1)), onPageSizeChange: (size) => { setTicketPageSize(size); setTicketPage(0) } }} renderRow={(ticket) => <TableRow key={ticket.id}><TableCell><span className="font-medium">{ticket.name || 'Unnamed ticket type'}</span>{ticket.attributes?.description && <span className="mt-1 block max-w-sm whitespace-pre-wrap text-xs text-ink-muted">{ticket.attributes.description}</span>}<span className="mt-0.5 block text-xs text-ink-muted">{ticket.id}</span></TableCell><TableCell className="text-right tabular-nums">{formatMinor(ticket.priceMinor, event.currency)}</TableCell><TableCell className="text-right tabular-nums">{ticket.sold ?? 0} / {ticket.total ?? '—'}</TableCell><TableCell className="whitespace-nowrap text-xs">{Number(ticket.saleStartAt) > 0 ? displayDateTime(ticket.saleStartAt, event.timezone) : 'No limit'}</TableCell><TableCell className="whitespace-nowrap text-xs">{Number(ticket.saleEndAt) > 0 ? displayDateTime(ticket.saleEndAt, event.timezone) : 'No limit'}</TableCell><TableCell>{ticket.status || 'Unknown'}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label={`Edit ${ticket.name || 'ticket type'}`} icon={<span aria-hidden="true">✎</span>} onClick={() => setTicketEditor(ticket)} /><AppIconAction label={`Delete ${ticket.name || 'ticket type'}`} icon={<span aria-hidden="true">×</span>} disabled={removeTicket.isPending || Number(ticket.sold ?? 0) > 0} onClick={() => { if (window.confirm('Delete this unsold ticket type?')) removeTicket.mutate(ticket.id) }} /></div></TableCell></TableRow>} containerClassName="" />{removeTicket.isError && <div className="px-5 py-3"><ErrorMessage>{removeTicket.error.message}</ErrorMessage></div>}</CardContent></Card>
       {ticketEditor !== undefined && <TicketTypeEditor key={ticketEditor?.id || 'new-ticket'} eventId={event.id} ticket={ticketEditor} currency={event.currency} onDone={() => { setTicketEditor(undefined); setTicketPage(0) }} />}
         </TabsContent>
         <TabsContent value="orders"><Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={orders} headers={['Order', 'Buyer contact', 'Status', { label: 'Total', className: 'text-right' }]} label="Event orders" loading={ordersQuery.isLoading} loadingMessage="Loading orders…" error={ordersQuery.isError ? ordersQuery.error.message : null} emptyMessage="No orders for this event yet." pagination={{ pageIndex: ordersPage, pageSize: orderPageSize, totalItems: ordersQuery.data?.total ?? 0, onPageChange: setOrdersPage, onPageSizeChange: (size) => { setOrderPageSize(size); setOrdersPage(0) } }} renderRow={(order) => <OrderRow key={order.id} order={order} />} containerClassName="" /></CardContent></Card></TabsContent>
         <TabsContent value="venue"><Card><CardContent className="pt-6">{venueQuery.isLoading ? <p className="text-sm text-ink-muted">Loading venue…</p> : venueQuery.isError ? <ErrorMessage>{venueQuery.error.message}</ErrorMessage> : venueQuery.data ? <dl className="grid gap-4 sm:grid-cols-2"><div><dt className="text-xs text-ink-muted">Venue</dt><dd className="mt-1 text-sm">{venueQuery.data.name || 'Unnamed venue'}</dd></div><div><dt className="text-xs text-ink-muted">Status</dt><dd className="mt-1 text-sm">{venueQuery.data.status || 'Unknown'}</dd></div><div><dt className="text-xs text-ink-muted">Address</dt><dd className="mt-1 text-sm">{venueQuery.data.address || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">City / country</dt><dd className="mt-1 text-sm">{[venueQuery.data.city, venueQuery.data.country].filter(Boolean).join(', ') || 'Not provided'}</dd></div><div><dt className="text-xs text-ink-muted">Capacity</dt><dd className="mt-1 text-sm">{venueQuery.data.capacity ?? 'Not provided'}</dd></div></dl> : <p className="text-sm text-ink-muted">No venue is assigned to this event.</p>}</CardContent></Card></TabsContent>
-        {(['coupons', 'fees', 'channels'] as const).map((section) => <TabsContent key={section} value={section}><Card><CardContent className="pt-6"><p className="font-medium">{section === 'coupons' ? 'Event coupons' : section === 'fees' ? 'Event fee overrides' : 'Event publishing channels'}</p><p className="mt-1 text-sm text-ink-muted">The admin API does not currently provide event-specific {section === 'coupons' ? 'coupon' : section === 'fees' ? 'fee override' : 'channel assignment'} endpoints, so this section cannot be managed yet.</p></CardContent></Card></TabsContent>)}
+        <TabsContent value="coupons"><EventCouponsPanel eventId={event.id} currency={event.currency} /></TabsContent>
+        <TabsContent value="callouts"><EventVendorCalloutsPanel eventId={event.id} orgId={event.orgId || ''} /></TabsContent>
+        <TabsContent value="fees"><EventFeeOverridePanel eventId={event.id} /></TabsContent>
+        <TabsContent value="channels"><EventPublishingChannelsPanel eventId={event.id} /></TabsContent>
       </Tabs>
     </div> : <p className="py-8 text-center text-sm text-ink-muted">No event details were returned.</p>}
   </section>
@@ -515,7 +549,7 @@ export function AdminEventsPage() {
     {orgsQuery.isError && <ErrorMessage>{orgsQuery.error.message}</ErrorMessage>}
     <Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={visible} headers={['Event', 'Organization', 'Venue', 'Category', 'Starts', 'Status', { label: 'Actions', className: 'text-right' }]} label="Admin events" loading={eventsQuery.isLoading} loadingMessage="Loading events…" error={eventsQuery.isError ? eventsQuery.error.message : null} emptyMessage={search ? `No events match “${search}”.` : <div><p className="text-sm font-medium">No events found</p><p className="mt-1 text-sm text-ink-muted">Create an event or adjust the organization and status filters.</p></div>} emptyClassName="h-32 text-center" pagination={{ pageIndex: page, pageSize: eventPageSize, totalItems: filtered.length, onPageChange: (next) => setPage(Math.min(next, pageCount - 1)), onPageSizeChange: (size) => { setEventPageSize(size); setPage(0) } }} renderRow={(event) => <TableRow key={event.id}><TableCell><span className="block font-medium">{event.title || 'Untitled event'}</span><span className="mt-0.5 block text-xs text-ink-muted">{event.id}</span></TableCell><TableCell>{organizations.find((org) => org.id === event.orgId)?.name || event.orgId || 'Organization unavailable'}</TableCell><TableCell>{venues.find((venue) => venue.id === event.venueId)?.name || '—'}</TableCell><TableCell>{categories.find((category) => category.id === event.categoryId)?.name || '—'}</TableCell><TableCell>{displayDateTime(event.startsAt, event.timezone)}</TableCell><TableCell>{statusBadge(event.status)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label={`View ${event.title || 'event'}`} icon={<span aria-hidden="true">↗</span>} onClick={() => navigate({ to: '/app/events/$eventId/view', params: { eventId: event.id } })} /><AppIconAction label={`Edit ${event.title || 'event'}`} icon={<span aria-hidden="true">✎</span>} onClick={() => setEditingEvent(event)} />{event.status === 'draft' && <AppIconAction label={`Publish ${event.title || 'event'}`} icon={<span aria-hidden="true">↑</span>} disabled={publish.isPending} onClick={() => publish.mutate(event.id)} />}</div></TableCell></TableRow>} containerClassName="" />
     </CardContent></Card>
-    <Sheet open={Boolean(editingEvent)} onOpenChange={(open) => { if (!open) setEditingEvent(null) }}><SheetContent className="w-full overflow-y-auto sm:max-w-4xl"><SheetHeader><SheetTitle>Edit event</SheetTitle><SheetDescription>Update this event's details and schedule.</SheetDescription></SheetHeader>{editingEvent && <EventForm event={editingEvent} organizations={organizations} onSaved={() => setEditingEvent(null)} />}</SheetContent></Sheet>
+    <Sheet open={Boolean(editingEvent)} onOpenChange={(open) => { if (!open) setEditingEvent(null) }}><SheetContent className="w-full overflow-y-auto sm:!max-w-6xl"><SheetHeader><SheetTitle>Edit event</SheetTitle><SheetDescription>Update this event's details and schedule.</SheetDescription></SheetHeader>{editingEvent && <EventForm event={editingEvent} organizations={organizations} onSaved={() => setEditingEvent(null)} />}</SheetContent></Sheet>
   </section>
 }
 
@@ -535,9 +569,11 @@ export function AdminEventCreatePage() {
       : orgsQuery.isError ? <ErrorMessage>{orgsQuery.error.message}</ErrorMessage>
         : organizations.length === 0 ? <Card><CardContent className="py-10 text-center text-sm text-ink-muted">No organizations are available to own an event.</CardContent></Card>
           : <Card className="gap-0 py-0"><CardContent className="p-0">
+            <div className="max-h-[calc(100dvh-13rem)] overflow-y-auto overscroll-contain">
             {venuesQuery.isError && <p role="status" className="mx-6 mt-5 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">Venue options could not be loaded. You can still create an event without assigning a venue.</p>}
             {categoriesQuery.isError && <p role="status" className="mx-6 mt-3 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">Event categories could not be loaded. You can still create an event without a category.</p>}
             <EventForm organizations={organizations} onSaved={(event) => { void navigate({ to: '/app/events/$eventId/view' as never, params: { eventId: event.id } as never }) }} />
+            </div>
           </CardContent></Card>}
   </section>
 }
