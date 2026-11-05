@@ -35,6 +35,7 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
 }
 
 export const getSiteConfig = (token: string) => request<SiteConfig>(token, '/api/admin/config')
+export const getPublicSiteConfig = (token: string) => request<SiteConfig>(token, '/api/config')
 export const putSiteConfig = (token: string, config: SiteConfig) => request<SiteConfig>(token, '/api/admin/config', { method: 'PUT', body: JSON.stringify(config) })
 
 export const listCountries = (token: string) => request<{ countries?: SupportedCountry[] | null; total?: number }>(token, '/api/admin/countries')

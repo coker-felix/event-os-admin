@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { getSiteConfig, listDistributionChannels, type DistributionChannel } from '@/services/admin-platform'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { getPublicSiteConfig, listDistributionChannels, type DistributionChannel } from '@/services/admin-platform'
 import {
   cancelAdminVendorCallout, closeAdminVendorCallout, createAdminEventCoupon, createOrganizationVendorCallout,
   getAdminEventFeeOverride, listAdminEventCoupons, listAdminEventPublications, listAdminVendorCallouts,
@@ -70,7 +71,7 @@ export function EventVendorCalloutsPanel({ eventId, orgId }: { eventId: string; 
     queryFn: () => listAdminVendorCallouts(session!.token, { eventId, limit: 100, offset: 0 }),
     enabled: Boolean(session?.token),
   })
-  const config = useQuery({ queryKey: ['qk-admin-platform-config'], queryFn: () => getSiteConfig(session!.token), enabled: Boolean(session?.token) })
+  const config = useQuery({ queryKey: ['qk-public-platform-config'], queryFn: () => getPublicSiteConfig(session!.token), enabled: Boolean(session?.token) })
   const categories = config.data?.calloutAllowedCategories?.length ? config.data.calloutAllowedCategories : ['pop_up']
   const refresh = () => client.invalidateQueries({ queryKey: calloutsKey(eventId) })
   const resetForm = () => { setEditing(null); setCategory(''); setServiceKinds([]); setOpensAt(''); setClosesAt('') }
@@ -137,6 +138,8 @@ export function EventCouponsPanel({ eventId, currency }: { eventId: string; curr
   const { session } = useAuth()
   const client = useQueryClient()
   const [code, setCode] = useState('')
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [innerTab, setInnerTab] = useState<'coupons' | 'discounts'>('coupons')
   const [discountType, setDiscountType] = useState<'percent' | 'flat_minor'>('percent')
   const [value, setValue] = useState('10')
   const [maxUses, setMaxUses] = useState('')
@@ -144,7 +147,7 @@ export function EventCouponsPanel({ eventId, currency }: { eventId: string; curr
   const invalidate = () => client.invalidateQueries({ queryKey: couponKey(eventId) })
   const create = useMutation({
     mutationFn: () => createAdminEventCoupon(session!.token, eventId, { code: code.trim(), discountType, value: Number(value), ...(maxUses ? { maxUses: Number(maxUses) } : {}) }),
-    onSuccess: async () => { await invalidate(); setCode(''); toast.success('Event coupon created') },
+    onSuccess: async () => { await invalidate(); setCode(''); setDialogOpen(false); toast.success('Event coupon created') },
     onError: (error) => toast.error('Could not create coupon', { description: error.message }),
   })
   const status = useMutation({
@@ -158,20 +161,22 @@ export function EventCouponsPanel({ eventId, currency }: { eventId: string; curr
     create.mutate()
   }
   return <div className="space-y-4">
-    <Card><CardContent className="space-y-4 pt-5">
-      <div><h3 className="font-medium">Add coupon for this event</h3><p className="mt-1 text-sm text-ink-muted">Coupons apply only to this event at checkout.</p></div>
-      <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={submit}>
+    <div className="flex gap-2 border-b border-line pb-3"><Button variant={innerTab === 'coupons' ? 'default' : 'outline'} onClick={() => setInnerTab('coupons')}>Coupons</Button><Button variant={innerTab === 'discounts' ? 'default' : 'outline'} onClick={() => setInnerTab('discounts')}>Discounts</Button></div>
+    {innerTab === 'coupons' ? <><Card><CardContent className="space-y-4 pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium">Coupons</h3><p className="mt-1 text-sm text-ink-muted">Attendees must enter a coupon code at checkout to receive the discount.</p></div><Button onClick={() => setDialogOpen(true)}>Add coupon</Button></div>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogContent><DialogHeader><DialogTitle>Add coupon</DialogTitle><DialogDescription>Create an event-specific code attendees can enter at checkout.</DialogDescription></DialogHeader><form className="grid gap-3 sm:grid-cols-2" onSubmit={submit}>
         <label className="space-y-1.5 text-sm font-medium">Code<Input required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={32} placeholder="EARLYBIRD" /></label>
         <label className="space-y-1.5 text-sm font-medium">Discount<select value={discountType} onChange={(e) => setDiscountType(e.target.value as typeof discountType)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="percent">Percentage</option><option value="flat_minor">Fixed amount</option></select></label>
         <label className="space-y-1.5 text-sm font-medium">{discountType === 'percent' ? 'Percent off' : `Amount (${currency || 'minor units'})`}<Input required type="number" min="1" max={discountType === 'percent' ? 99 : undefined} step="1" value={value} onChange={(e) => setValue(e.target.value)} /></label>
         <label className="space-y-1.5 text-sm font-medium">Use limit<Input type="number" min="1" step="1" value={maxUses} onChange={(e) => setMaxUses(e.target.value)} placeholder="Unlimited" /></label>
-        <div className="sm:col-span-2 lg:col-span-4"><Button type="submit" disabled={create.isPending || !code.trim() || !Number.isInteger(Number(value)) || Number(value) < 1}>{create.isPending ? 'Creating…' : 'Create coupon'}</Button></div>
+        <DialogFooter className="sm:col-span-2"><Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={create.isPending || !code.trim() || !Number.isInteger(Number(value)) || Number(value) < 1}>{create.isPending ? 'Creating…' : 'Create coupon'}</Button></DialogFooter>
       </form>
       {create.isError && <PanelError>{create.error.message}</PanelError>}
+      </DialogContent></Dialog>
     </CardContent></Card>
     <Card><CardContent className="p-0">
       {query.isLoading ? <p className="p-5 text-sm text-ink-muted">Loading coupons…</p> : query.isError ? <div className="p-5"><PanelError>{query.error.message}</PanelError></div> : coupons.length === 0 ? <p className="p-5 text-sm text-ink-muted">No coupons have been created for this event.</p> : <div className="divide-y divide-line">{coupons.map((coupon) => <div key={coupon.id} className="flex flex-wrap items-center justify-between gap-3 p-4"><div className="min-w-0"><p className="font-medium">{coupon.code} <Badge variant={coupon.status === 'active' ? 'default' : 'secondary'}>{coupon.status || 'unknown'}</Badge></p><p className="mt-1 text-sm text-ink-muted">{couponDiscount(coupon, currency)} · {Number(coupon.usedCount || 0)} used{Number(coupon.maxUses || 0) > 0 ? ` of ${coupon.maxUses}` : ' · unlimited uses'}</p></div><Button variant="outline" size="sm" disabled={status.isPending} onClick={() => status.mutate({ couponId: coupon.id, next: coupon.status === 'active' ? 'disabled' : 'active' })}>{coupon.status === 'active' ? 'Disable' : 'Enable'}</Button></div>)}</div>}
-    </CardContent></Card>
+    </CardContent></Card></> : <Card><CardContent className="space-y-3 pt-5"><div><h3 className="font-medium">Automatic discounts</h3><p className="mt-1 text-sm text-ink-muted">Discounts are applied automatically to eligible orders; attendees do not enter a code.</p></div><p role="status" className="text-sm text-ink-muted">Automatic discount rules are not available in the event API yet.</p><Button disabled title="Automatic discount rules are not supported by the event API yet">Add discount</Button></CardContent></Card>}
   </div>
 }
 

@@ -240,14 +240,14 @@ export function RootLayout() {
 
   return (
     <div className={`min-h-screen bg-canvas text-ink ${isDarkMode ? 'dark' : ''}`}>
-      <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-canvas bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-line bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
         <div className="flex h-14 items-center gap-3 border-line px-5">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-sm font-bold text-white shadow-card">E</span>
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand text-sm font-bold text-white">E</span>
           {!collapsed && <span className="min-w-0"><span className="block text-[15px] font-semibold tracking-tight">event<span className="text-brand">OS</span></span><span className="block text-[11px] text-ink-muted">Admin Management Console</span></span>}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-6">
           <nav aria-label="Main navigation" className="space-y-1">
-            <Link to="/app" title={collapsed ? 'Overview' : undefined} aria-current={pathname === '/app' ? 'page' : undefined} className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${pathname === '/app' ? 'bg-brand-soft text-brand dark:text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
+            <Link to="/app" title={collapsed ? 'Overview' : undefined} aria-current={pathname === '/app' ? 'page' : undefined} className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${pathname === '/app' ? 'bg-brand-soft text-brand' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
               <SquaresFour aria-hidden="true" size={18} weight={pathname === '/app' ? 'fill' : 'duotone'} className="shrink-0" />
               {!collapsed && 'Overview'}
             </Link>
@@ -282,7 +282,7 @@ export function RootLayout() {
                   {group.items.map((item) => {
                     const active = (item.to === '/app/accounts/organizations' && organizationDetailActive) || (item.to === '/app/events' ? pathname === item.to || eventDetailActive : pathname === item.to || pathname.startsWith(`${item.to}/`))
                     const ItemIcon = itemIcons[item.to] ?? GroupIcon
-                    return <Link key={item.to} to={item.to as never} aria-current={active ? 'page' : undefined} className={`flex min-h-8 items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${active ? 'bg-brand-soft font-medium text-brand dark:text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
+                    return <Link key={item.to} to={item.to as never} aria-current={active ? 'page' : undefined} className={`flex min-h-8 items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${active ? 'bg-brand-soft font-medium text-brand' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
                       <ItemIcon aria-hidden="true" size={16} weight="duotone" className="shrink-0" />
                       {item.label}
                     </Link>
@@ -299,8 +299,8 @@ export function RootLayout() {
         </div>
       </aside>
       <div className={`min-h-screen transition-[margin] ${collapsed ? 'ml-[76px]' : 'ml-[248px]'}`}>
-        <header className="sticky top-0 z-[5] flex h-14 items-center justify-end gap-4 border-b border-canvas bg-surface/90 px-8 font-sans text-sm backdrop-blur">
-          <label className="relative flex h-10 w-full max-w-80 items-center gap-2 rounded-full border border-line bg-surface-muted px-3.5 text-ink-muted">
+        <header className="sticky top-0 z-[5] flex h-14 items-center justify-end gap-4 border-b border-line bg-surface/90 px-8 font-sans text-sm backdrop-blur">
+          <label className="relative flex h-10 w-full max-w-80 items-center gap-2 rounded-lg border border-line bg-surface-muted px-3.5 text-ink-muted">
             <MagnifyingGlass size={14} aria-hidden="true" />
             <span className="sr-only">Search</span>
             <input type="search" placeholder="Search" className="h-full flex-1 bg-transparent text-xs outline-none placeholder:text-ink-muted" />

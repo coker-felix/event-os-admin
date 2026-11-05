@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { OrganizationOverview } from '@/components/accounts/organizations/organization-overview'
 import { OrganizationMembers } from '@/components/accounts/organizations/organization-members'
 import { OrganizationKYB } from '@/components/accounts/organizations/organization-kyb'
+import { OrganizationCapabilities } from '@/components/accounts/organizations/organization-capabilities'
 import { OrganizationVendorProfiles } from '@/components/accounts/organizations/organization-vendor-profiles'
 import { OrganizationVenues } from '@/components/accounts/organizations/organization-venues'
 import { OrganizationCallouts } from '@/components/accounts/organizations/organization-callouts'
@@ -91,12 +92,7 @@ function OrganizationDetailPage() {
               <Card>
                 <CardHeader><CardTitle>Organization capabilities</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                  {(org.capabilities ?? []).map((item) => item && (
-                    <div key={item.capability} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-sm">
-                      <span className="font-medium">{item.capability}</span>
-                      <span className="text-ink-muted">{item.status || 'pending'} · KYB {item.kybStatus || 'pending'}</span>
-                    </div>
-                  ))}
+                  <OrganizationCapabilities organizationId={orgId} capabilities={org.capabilities ?? []} />
                   {availableCapabilities.length === 0 && <p className="text-sm text-ink-muted">This organization has all available capabilities.</p>}
                   {availableCapabilities.length > 0 && (
                     <form className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_1fr_auto]" onSubmit={submitCapability}>

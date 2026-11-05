@@ -8,7 +8,6 @@ import {
   decideOrganizationCapabilityKYB,
   getOrganizationKYBEvidence,
   getOrganizationKYBRequirements,
-  setOrganizationCapabilityStatus,
   submitOrganizationCapabilityKYB,
   uploadOrganizationKYBEvidence,
   type OrganizationKYBEvidence,
@@ -30,7 +29,6 @@ export function OrganizationKYB({ organizationId, capabilities }: { organization
   const [localEvidence, setLocalEvidence] = useState<Evidence[]>([])
   const [reason, setReason] = useState('')
   const [decision, setDecision] = useState<'approved' | 'rejected'>('approved')
-  const [statusReason, setStatusReason] = useState('')
   const [idempotencyKey, setIdempotencyKey] = useState('')
   const requirementQuery = useQuery({
     queryKey: ['admin-kyb-requirements', organizationId, capability],
@@ -99,11 +97,6 @@ export function OrganizationKYB({ organizationId, capabilities }: { organization
     mutationFn: () => decideOrganizationCapabilityKYB(session!.token, organizationId, capability, decision, reason.trim()),
     onSuccess: async () => { setReason(''); await queryClient.invalidateQueries({ queryKey: ['admin-organization', organizationId] }) },
   })
-  const statusMutation = useMutation({
-    mutationFn: (next: 'active' | 'suspended') => setOrganizationCapabilityStatus(session!.token, organizationId, capability, next, statusReason.trim()),
-    onSuccess: async () => { setStatusReason(''); await queryClient.invalidateQueries({ queryKey: ['admin-organization', organizationId] }) },
-  })
-
   const makeSubmission = (): SubmissionInput => {
     const documents: SubmissionInput['documents'] = []
     const fields: SubmissionInput['fields'] = []
@@ -216,15 +209,10 @@ export function OrganizationKYB({ organizationId, capabilities }: { organization
                 <label className="space-y-1.5 text-sm font-medium">Reason<Input value={reason} onChange={(event) => setReason(event.target.value)} required /></label>
                 <div className="flex items-end"><Button type="button" disabled={!reason.trim() || review.isPending} onClick={() => review.mutate()}>{review.isPending ? 'Saving…' : 'Record decision'}</Button></div>
                 {review.isError && <p role="alert" className="text-sm text-danger sm:col-span-3">{review.error.message}</p>}
+                {review.isSuccess && decision === 'approved' && <p role="status" className="text-sm text-ink-muted sm:col-span-3">KYB approved. Activate this capability in the Capabilities tab to grant workspace access.</p>}
               </div>
             )}
-            {selected && (selected.kybStatus === 'approved' && selected.status !== 'active' || selected.status === 'active') && (
-              <div className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_auto]">
-                <label className="space-y-1.5 text-sm font-medium">{selected.status === 'active' ? 'Suspension reason' : 'Activation reason'}<Input value={statusReason} onChange={(event) => setStatusReason(event.target.value)} required /></label>
-                <div className="flex items-end"><Button type="button" disabled={!statusReason.trim() || statusMutation.isPending} onClick={() => { const next = selected.status === 'active' ? 'suspended' : 'active'; if (window.confirm(`${next === 'suspended' ? 'Suspend' : 'Activate'} the ${capability} capability?`)) statusMutation.mutate(next) }}>{statusMutation.isPending ? 'Saving…' : selected.status === 'active' ? 'Suspend capability' : 'Activate capability'}</Button></div>
-                {statusMutation.isError && <p role="alert" className="text-sm text-danger sm:col-span-2">{statusMutation.error.message}</p>}
-              </div>
-            )}
+
           </>
         )}
       </CardContent>
