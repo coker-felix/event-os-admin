@@ -219,7 +219,7 @@ export function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const [isDarkMode, setIsDarkMode] = useState(() => {
     try {
-      return window.localStorage.getItem('event-os-admin-theme') === 'dark'
+      return window.localStorage.getItem('event-os-admin-theme-v2') !== 'light'
     } catch {
       return false
     }
@@ -232,7 +232,7 @@ export function RootLayout() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode)
     try {
-      window.localStorage.setItem('event-os-admin-theme', isDarkMode ? 'dark' : 'light')
+      window.localStorage.setItem('event-os-admin-theme-v2', isDarkMode ? 'dark' : 'light')
     } catch {
       // The dashboard remains usable when browser storage is unavailable.
     }
@@ -243,7 +243,7 @@ export function RootLayout() {
       <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-line bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
         <div className="flex h-14 items-center gap-3 border-line px-5">
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand text-sm font-bold text-white">E</span>
-          {!collapsed && <span className="min-w-0"><span className="block text-[15px] font-semibold tracking-tight">event<span className="text-brand">OS</span></span><span className="block text-[11px] text-ink-muted">Admin Management Console</span></span>}
+          {!collapsed && <span className="min-w-0"><span className="block text-[16px] font-semibold tracking-tight">EventRail</span><span className="block text-[14px] text-ink-muted">Admin Console</span></span>}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-6">
           <nav aria-label="Main navigation" className="space-y-1">
