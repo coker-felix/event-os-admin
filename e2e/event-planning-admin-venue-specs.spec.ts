@@ -57,6 +57,11 @@ test('verifies a declared venue spec field', async ({ page }) => {
       }),
     })
   })
+  await page.route('**/api/admin/**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsHeaders })
+    return route.fallback()
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'event-os-admin-session',
@@ -86,6 +91,11 @@ test('shows the neutral disabled state for venue specs', async ({ page }) => {
       body: JSON.stringify({ error: 'feature disabled' }),
     }),
   )
+  await page.route('**/api/admin/**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsHeaders })
+    return route.fallback()
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'event-os-admin-session',

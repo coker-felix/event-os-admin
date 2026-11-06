@@ -52,6 +52,11 @@ test('creates, edits, and validates staffing rules with mocked admin API', async
       body: JSON.stringify(saved),
     })
   })
+  await page.route('**/api/admin/**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsHeaders })
+    return route.fallback()
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'event-os-admin-session',

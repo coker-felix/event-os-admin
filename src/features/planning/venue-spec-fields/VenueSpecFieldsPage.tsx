@@ -194,7 +194,9 @@ export function VenueSpecFieldsPage() {
             </p>
           )}
           <div className="flex gap-2 sm:col-span-2">
-            <Button disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save field'}</Button>
+            <Button type="submit" disabled={save.isPending}>
+              {save.isPending ? 'Saving…' : 'Save field'}
+            </Button>
             <Button type="button" variant="outline" onClick={closeForm}>
               Cancel
             </Button>

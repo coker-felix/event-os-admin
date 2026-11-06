@@ -33,6 +33,11 @@ test('blocks dependency cycles with path and saves a valid platform playbook', a
       body: JSON.stringify(saved),
     })
   })
+  await page.route('**/api/admin/**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsHeaders })
+    return route.fallback()
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'event-os-admin-session',
@@ -45,7 +50,7 @@ test('blocks dependency cycles with path and saves a valid platform playbook', a
   await page.getByLabel('Task 1 title').fill('Confirm venue')
   await page.getByRole('button', { name: 'Add task' }).click()
   await page.getByLabel('Task 2 title').fill('Approve layout')
-  await page.getByLabel('Task 1 dependencies').selectOption({ index: 1 })
+  await page.getByLabel('Task 1 dependencies').selectOption({ index: 0 })
   await page.getByLabel('Task 2 dependencies').selectOption({ index: 0 })
   await expect(page.getByRole('alert').filter({ hasText: 'Dependency cycle' })).toContainText(
     'Confirm venue',

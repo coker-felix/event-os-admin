@@ -34,6 +34,11 @@ test('edits venue type labels using the code path in the API', async ({ page }) 
       body: JSON.stringify({ code: 'banquet_hall', label }),
     })
   })
+  await page.route('**/api/admin/**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsHeaders })
+    return route.fallback()
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'event-os-admin-session',

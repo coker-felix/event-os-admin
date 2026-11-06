@@ -43,6 +43,11 @@ test('creates and edits venue spec fields with immutable codes', async ({ page }
       body: JSON.stringify({ types: [{ code: 'banquet_hall', label: 'Banquet hall' }] }),
     }),
   )
+  await page.route('**/api/admin/**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsHeaders })
+    return route.fallback()
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'event-os-admin-session',
@@ -61,7 +66,7 @@ test('creates and edits venue spec fields with immutable codes', async ({ page }
   await page.getByRole('button', { name: 'Save field' }).click()
   await page.getByRole('button', { name: 'Edit field Ceiling height' }).click()
   await expect(page.getByLabel('Code', { exact: true })).toHaveValue('ceiling_height')
-  await expect(page.getByLabel('Code', { exact: true })).toBeDisabled()
+  await expect(page.getByLabel('Code', { exact: true })).toHaveAttribute('readonly', '')
   await page.getByLabel('Label', { exact: true }).fill('Clearance height')
   await page.getByRole('button', { name: 'Save field' }).click()
   await expect(page.getByRole('cell', { name: 'Clearance height', exact: true })).toBeVisible()
@@ -92,6 +97,11 @@ test('shows the neutral disabled state when planning is not enabled', async ({ p
       body: JSON.stringify({ error: 'feature disabled' }),
     }),
   )
+  await page.route('**/api/admin/**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsHeaders })
+    return route.fallback()
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'event-os-admin-session',

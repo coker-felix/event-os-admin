@@ -29,6 +29,7 @@ export function PlaybooksPage() {
   const client = useQueryClient()
   const [offset, setOffset] = useState(0)
   const [editing, setEditing] = useState<Playbook | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
   const [name, setName] = useState('')
   const [tasks, setTasks] = useState<PlaybookTask[]>([newTask()])
   const [formError, setFormError] = useState('')
@@ -47,6 +48,7 @@ export function PlaybooksPage() {
     },
     onSuccess: () => {
       setEditing(null)
+      setFormOpen(false)
       setFormError('')
       void client.invalidateQueries({ queryKey: ['planning-playbooks'] })
     },
@@ -54,6 +56,7 @@ export function PlaybooksPage() {
   })
   const open = (playbook?: Playbook) => {
     setEditing(playbook ?? null)
+    setFormOpen(true)
     setName(playbook?.name ?? '')
     setTasks(
       playbook?.tasks?.map((task) => ({ ...task, dependsOn: [...(task.dependsOn ?? [])] })) ?? [
@@ -133,14 +136,19 @@ export function PlaybooksPage() {
           </CardContent>
         </Card>
       )}
-      {editing !== null || name !== '' ? (
+      {formOpen ? (
         <form onSubmit={submit} className="space-y-4 rounded-lg border border-line bg-surface p-4">
           <h2 className="font-semibold">
             {editing ? `Edit ${editing.name} (new version)` : 'Create playbook'}
           </h2>
           <label className="block space-y-1 text-sm">
             Playbook name
-            <Input value={name} onChange={(event) => setName(event.target.value)} required />
+            <Input
+              aria-label="Playbook name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+            />
           </label>
           <PlaybookTasksEditor
             tasks={tasks}
@@ -149,10 +157,13 @@ export function PlaybooksPage() {
             onAdd={() => setTasks([...tasks, newTask()])}
           />
           {formError && <p role="alert">{formError}</p>}
-          <Button disabled={save.isPending || validationErrors.length > 0 || !name.trim()}>
+          <Button
+            type="submit"
+            disabled={save.isPending || validationErrors.length > 0 || !name.trim()}
+          >
             {save.isPending ? 'Saving…' : 'Save playbook'}
           </Button>
-          <Button type="button" variant="outline" onClick={() => open()}>
+          <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
             Cancel
           </Button>
         </form>

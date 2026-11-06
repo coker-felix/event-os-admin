@@ -163,7 +163,7 @@ export function CalendarRulesPage() {
             ))}
           </ul>
           {error && <p role="alert">{error}</p>}
-          <Button disabled={save.isPending}>
+          <Button type="submit" disabled={save.isPending}>
             {save.isPending ? 'Saving…' : 'Save calendar rule'}
           </Button>
           <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>

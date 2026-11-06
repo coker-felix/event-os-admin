@@ -58,7 +58,11 @@ export function StaffingRuleForm({
     onSave(value)
   }
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-lg border border-line bg-surface p-4">
+    <form
+      noValidate
+      onSubmit={submit}
+      className="space-y-3 rounded-lg border border-line bg-surface p-4"
+    >
       <h2 className="font-semibold">
         {initialValue ? 'Edit staffing rule' : 'Create staffing rule'}
       </h2>
@@ -122,7 +126,9 @@ export function StaffingRuleForm({
       </label>
       {validationError && <p role="alert">{validationError}</p>}
       {serverError && <p role="alert">{serverError}</p>}
-      <Button disabled={pending}>{pending ? 'Saving…' : 'Save rule'}</Button>
+      <Button type="submit" disabled={pending}>
+        {pending ? 'Saving…' : 'Save rule'}
+      </Button>
       <Button type="button" variant="outline" onClick={onCancel}>
         Cancel
       </Button>

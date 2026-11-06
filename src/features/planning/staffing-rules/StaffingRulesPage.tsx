@@ -21,9 +21,13 @@ export function StaffingRulesPage() {
   const save = useMutation({
     mutationFn: (value: Omit<StaffingRule, 'id'>) =>
       saveStaffingRule(session!.token, value, editing?.id),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       setFormOpen(false)
       setEditing(null)
+      client.setQueryData<{ rules?: StaffingRule[] | null }>(['planning-staffing'], (current) => {
+        const rules = current?.rules ?? []
+        return { ...current, rules: [...rules.filter((rule) => rule.id !== saved.id), saved] }
+      })
       void client.invalidateQueries({ queryKey: ['planning-staffing'] })
     },
   })

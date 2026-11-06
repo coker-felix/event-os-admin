@@ -22,9 +22,13 @@ export function VenueTypesPage() {
   const [label, setLabel] = useState('')
   const save = useMutation({
     mutationFn: () => saveVenueType(session!.token, editing!.code, label.trim()),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       setEditing(null)
       setLabel('')
+      client.setQueryData<{ types?: VenueType[] | null }>(['planning-types'], (current) => {
+        const types = current?.types ?? []
+        return { ...current, types: [...types.filter((type) => type.code !== saved.code), saved] }
+      })
       void client.invalidateQueries({ queryKey: ['planning-types'] })
     },
   })
@@ -90,7 +94,9 @@ export function VenueTypesPage() {
             />
           </label>
           {save.error && <p role="alert">{save.error.message}</p>}
-          <Button disabled={save.isPending || !label.trim()}>Save label</Button>
+          <Button type="submit" disabled={save.isPending || !label.trim()}>
+            Save label
+          </Button>
           <Button type="button" variant="outline" onClick={() => setEditing(null)}>
             Cancel
           </Button>
