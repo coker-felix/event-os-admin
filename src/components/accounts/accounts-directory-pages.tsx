@@ -2461,10 +2461,10 @@ export function AccountsOrganizationsPage() {
                       ? formatDate(organization.createdAt.slice(0, 10))
                       : "—"}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right flex align-center items-center flex-wrap">
                     <div className="flex justify-end gap-1">
                       <AppIconAction
-                        label="View details"
+                        label="View"
                         icon={<Eye aria-hidden="true" />}
                         showLabel
                         onClick={() => {
