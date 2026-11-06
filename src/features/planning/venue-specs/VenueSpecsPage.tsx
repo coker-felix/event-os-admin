@@ -53,7 +53,7 @@ export function VenueSpecsPage() {
       {query.isLoading ? (
         <p role="status">Loading venue specifications…</p>
       ) : query.isError ? (
-        <p role="alert">
+        <p role={status === 412 ? 'status' : 'alert'}>
           {status === 412
             ? 'Event planning is not enabled for this organization.'
             : query.error.message}
