@@ -7,6 +7,14 @@ const corsHeaders = {
 }
 
 test('creates, edits, and validates staffing rules with mocked admin API', async ({ page }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   let rules = [
     {
       id: 'rule-1',

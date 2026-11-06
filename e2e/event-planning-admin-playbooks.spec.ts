@@ -7,6 +7,14 @@ const corsHeaders = {
 }
 
 test('blocks dependency cycles with path and saves a valid platform playbook', async ({ page }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   let playbooks: unknown[] = []
   await page.route('**/api/admin/playbooks**', async (route) => {
     if (route.request().method() === 'GET')

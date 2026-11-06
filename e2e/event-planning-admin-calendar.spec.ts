@@ -9,6 +9,14 @@ const corsHeaders = {
 test('adds calendar holidays and reports invalid dates and weekend configuration', async ({
   page,
 }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   let saved: Record<string, unknown> | null = null
   await page.route('**/api/admin/calendar-rules**', async (route) => {
     if (route.request().method() === 'GET')

@@ -7,6 +7,14 @@ const corsHeaders = {
 }
 
 test('edits venue type labels using the code path in the API', async ({ page }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   let label = 'Banquet hall'
   let requestPath = ''
   await page.route('**/api/admin/venue-types**', async (route) => {

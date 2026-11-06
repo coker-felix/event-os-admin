@@ -7,6 +7,14 @@ const corsHeaders = {
 }
 
 test('verifies a declared venue spec field', async ({ page }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   let verified = false
   await page.route('**/api/admin/venues/venue-1/specs**', async (route) => {
     if (route.request().method() === 'GET')
@@ -62,6 +70,14 @@ test('verifies a declared venue spec field', async ({ page }) => {
 })
 
 test('shows the neutral disabled state for venue specs', async ({ page }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   await page.route('**/api/admin/venues/venue-1/specs', (route) =>
     route.fulfill({
       status: 412,

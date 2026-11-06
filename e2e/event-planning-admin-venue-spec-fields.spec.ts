@@ -7,6 +7,14 @@ const corsHeaders = {
 }
 
 test('creates and edits venue spec fields with immutable codes', async ({ page }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   let fields: Array<Record<string, unknown>> = []
   await page.route('**/api/admin/venue-spec-fields**', async (route) => {
     if (route.request().method() === 'GET')
@@ -60,6 +68,14 @@ test('creates and edits venue spec fields with immutable codes', async ({ page }
 })
 
 test('shows the neutral disabled state when planning is not enabled', async ({ page }) => {
+  await page.route('**/api/admin/**', async (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: '{}',
+    }),
+  )
   await page.route('**/api/admin/venue-spec-fields**', (route) =>
     route.fulfill({
       status: 412,
