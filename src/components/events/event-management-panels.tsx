@@ -15,11 +15,43 @@ import {
   setAdminEventFeeOverride, unpublishAdminEventFromChannel, updateOrganizationVendorCallout,
   type AdminCoupon, type AdminEventPublication, type AdminVendorCallout,
 } from '@/services/admin-events-ticketing'
+import { updateAdminEventBranding, uploadAdminEventImage, type AdminEvent } from '@/services/admin-events-ticketing'
 
 const couponKey = (eventId: string) => ['qk-admin-events', 'detail', eventId, 'coupons'] as const
 const publicationKey = (eventId: string) => ['qk-admin-events', 'detail', eventId, 'publications'] as const
 const feeOverrideKey = (eventId: string) => ['qk-admin-events', 'detail', eventId, 'fee-override'] as const
 const calloutsKey = (eventId: string) => ['qk-admin-events', 'detail', eventId, 'vendor-callouts'] as const
+
+export function EventBrandingPanel({ event }: { event: AdminEvent }) {
+  const { session } = useAuth()
+  const client = useQueryClient()
+  const [logoUrl, setLogoUrl] = useState(event.logoUrl || '')
+  const [heroImageUrl, setHeroImageUrl] = useState(event.heroImageUrl || '')
+  const [accentColor, setAccentColor] = useState(event.accentColor || '#0f766e')
+  const [promoTagline, setPromoTagline] = useState(event.promoTagline || '')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [bannerFile, setBannerFile] = useState<File | null>(null)
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!event.orgId) throw new Error('This event does not have an organization owner.')
+      const [logo, banner] = await Promise.all([
+        logoFile ? uploadAdminEventImage(session!.token, event.orgId, 'logo', logoFile) : Promise.resolve(null),
+        bannerFile ? uploadAdminEventImage(session!.token, event.orgId, 'banner', bannerFile) : Promise.resolve(null),
+      ])
+      return updateAdminEventBranding(session!.token, event.id, { logoUrl: logo?.url ?? logoUrl, heroImageUrl: banner?.url ?? heroImageUrl, accentColor, promoTagline })
+    },
+    onSuccess: async (saved) => {
+      await client.invalidateQueries({ queryKey: ['qk-admin-events', 'detail', event.id] })
+      setLogoUrl(saved.logoUrl || '')
+      setHeroImageUrl(saved.heroImageUrl || '')
+      setLogoFile(null)
+      setBannerFile(null)
+      toast.success('Event branding saved')
+    },
+    onError: (error) => toast.error('Could not save event branding', { description: error.message }),
+  })
+  return <Card><CardContent className="space-y-5 pt-5"><div><h3 className="font-medium">Event branding</h3><p className="mt-1 text-sm text-ink-muted">Control the images and accent details shown on the public event page.</p></div><div className="grid gap-5 sm:grid-cols-2"><label className="space-y-2 text-sm font-medium">Logo image<input type="file" accept="image/png,image/jpeg" onChange={(e) => setLogoFile(e.target.files?.[0] || null)} className="block w-full text-sm" />{logoFile && <span className="block text-xs font-normal text-ink-muted">Selected: {logoFile.name}</span>}{logoUrl && <img src={logoUrl} alt={`${event.title || 'Event'} logo preview`} className="h-24 w-24 rounded-lg border border-line object-contain p-2" />}</label><label className="space-y-2 text-sm font-medium">Hero image<input type="file" accept="image/png,image/jpeg" onChange={(e) => setBannerFile(e.target.files?.[0] || null)} className="block w-full text-sm" />{bannerFile && <span className="block text-xs font-normal text-ink-muted">Selected: {bannerFile.name}</span>}{heroImageUrl && <img src={heroImageUrl} alt={`${event.title || 'Event'} hero preview`} className="h-24 w-full rounded-lg border border-line object-cover" />}</label><label className="space-y-1.5 text-sm font-medium">Accent color<input aria-label="Event accent color" type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} className="mt-1.5 block h-10 w-full rounded border border-line bg-surface p-1" /></label><label className="space-y-1.5 text-sm font-medium">Promotion tagline<Input value={promoTagline} maxLength={200} onChange={(e) => setPromoTagline(e.target.value)} /></label></div><Button disabled={mutation.isPending || (!event.orgId)} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving…' : 'Save branding'}</Button></CardContent></Card>
+}
 
 const calloutServiceKinds = [
   ['check_in_assistance', 'Check-in assistance'],

@@ -32,9 +32,9 @@ export function LoginPage() {
   return (
     <main className="login-shell">
       <section className="login-form-side" aria-labelledby="login-title">
-        <div className="login-brand" aria-label="eventOS">
-          <span className="login-brand-mark">E</span>
-          <span>event<span className="login-brand-accent">OS</span></span>
+        <div className="login-brand" aria-label="EventRail">
+          <img src="/brand/eventrail-symbol-white.svg" alt="" className="login-brand-mark" />
+          <span>EventRail</span>
         </div>
 
         <div className="login-form-wrap">
