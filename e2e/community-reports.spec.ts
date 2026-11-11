@@ -29,7 +29,7 @@ test('AD-4: Dismiss removes the report from Open without changing target status'
     await route.fulfill({ status: 200, headers, contentType: 'application/json', body: '{}' })
   })
   await page.goto('/app/community/reports')
-  await page.getByRole('button', { name: 'Dismiss' }).click()
+  await page.getByRole('button', { name: 'Dismiss report' }).click()
   await page.getByLabel('Reason').fill('Reviewed and not actionable')
   await page.getByRole('button', { name: 'Submit action' }).click()
   await expect(page.getByText('No open reports')).toBeVisible()
@@ -44,7 +44,7 @@ test('AD-8: Empty open queue has explicit copy', async ({ page }) => {
 test('AD-9: Pagination reports the server total', async ({ page }) => {
   await page.route('**/api/admin/community/reports**', async (route) => route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify({ reports: Array.from({ length: 10 }, (_, index) => report(`r-${index}`, 'open', 'published')), total: 47 }) }))
   await page.goto('/app/community/reports')
-  await expect(page.getByText('Showing 1 to 1 of 47')).toBeVisible()
+  await expect(page.getByText('Showing 1 to 10 of 47')).toBeVisible()
 })
 
 test('Report detail lists every report on the target', async ({ page }) => {

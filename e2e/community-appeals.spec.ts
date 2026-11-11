@@ -16,6 +16,7 @@ test('appeals prevent the original moderator deciding and explain a forbidden de
   await page.goto('/app/community/appeals')
   const ownRow = page.getByRole('row').filter({ hasText: 'user-1' })
   await expect(ownRow.getByRole('button', { name: 'Decide' })).toBeDisabled()
+  await ownRow.getByRole('button', { name: 'Decide' }).hover()
   await expect(page.getByText('Another moderator must decide this appeal').first()).toBeVisible()
   const otherRow = page.getByRole('row').filter({ hasText: 'user-2' })
   await otherRow.getByRole('button', { name: 'Decide' }).click()
