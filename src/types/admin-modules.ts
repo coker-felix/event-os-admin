@@ -9,6 +9,7 @@ export type AdminModuleId =
   | 'documents'
   | 'contracts'
   | 'invoices'
+  | 'community'
 
 export type AdminNavigationItem = {
   label: string

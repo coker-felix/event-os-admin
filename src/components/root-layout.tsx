@@ -69,6 +69,7 @@ const moduleIcons: Record<AdminNavigationModule['id'], Icon> = {
   documents: FileText,
   contracts: FileText,
   invoices: Receipt,
+  community: UsersThree,
 }
 
 const itemIcons: Record<string, Icon> = {
@@ -120,6 +121,12 @@ const itemIcons: Record<string, Icon> = {
   '/app/documents/vendor-contract-backfills': ArrowCounterClockwise,
   '/app/documents/venue-contract-backfills': ArrowCounterClockwise,
   '/app/documents/contract-reconciliation': Scales,
+  '/app/community/reports': Flag,
+  '/app/community/appeals': Scales,
+  '/app/community/blueprints': FileText,
+  '/app/community/suspensions': ShieldSlash,
+  '/app/community/badges': ShieldCheck,
+  '/app/community/skills': Tag,
 }
 
 const navigation: readonly AdminNavigationModule[] = [
@@ -210,6 +217,16 @@ const navigation: readonly AdminNavigationModule[] = [
       { label: 'Platform playbooks', to: '/app/platform/playbooks' },
       { label: 'Venue types', to: '/app/platform/venue-types' },
       { label: 'Venue spec fields', to: '/app/platform/venue-spec-fields' },
+    ],
+  },
+  {
+    id: 'community', label: 'Community', icon: '◉', items: [
+      { label: 'Reports', to: '/app/community/reports' },
+      { label: 'Appeals', to: '/app/community/appeals' },
+      { label: 'Blueprints', to: '/app/community/blueprints' },
+      { label: 'Suspensions', to: '/app/community/suspensions' },
+      { label: 'Badges', to: '/app/community/badges' },
+      { label: 'Skills', to: '/app/community/skills' },
     ],
   },
 ]
