@@ -6,6 +6,7 @@ export interface AdminConsumer {
   email?: string | null
   phone?: string | null
   status?: 'guest' | 'active' | 'suspended' | null
+  createdAt?: string | null
   claimedAt?: string | null
   phoneVerified?: boolean | null
   emailVerified?: boolean | null

@@ -14,6 +14,7 @@ import { TableCell, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { createAdminConsumer, getAdminConsumer, listAdminConsumerChannels, listAdminConsumers, setAdminConsumerStatus, type AdminConsumer } from '@/services/admin-users'
 import { listAdminOrganizations } from '@/services/admin-account-directory'
+import { formatDate } from '@/lib/date-format'
 
 const usersQueryKey = ['qk-admin-consumers'] as const
 
@@ -131,7 +132,11 @@ export function AccountsUsersPage() {
     queryFn: () => listAdminConsumers(session!.token, status || undefined),
     enabled: Boolean(session?.token),
   })
-  const users = usersQuery.data?.users ?? []
+  const users = (usersQuery.data?.users ?? []).slice().sort((a, b) => {
+    const aDate = a.createdAt ? Date.parse(a.createdAt) : Number.NEGATIVE_INFINITY
+    const bDate = b.createdAt ? Date.parse(b.createdAt) : Number.NEGATIVE_INFINITY
+    return bDate - aDate || a.id.localeCompare(b.id)
+  })
   const filteredUsers = useMemo(() => users.filter((user) => `${user.name ?? ''} ${user.email ?? ''} ${user.phone ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())), [users, search])
   const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
   const visibleUsers = filteredUsers.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
@@ -154,10 +159,11 @@ export function AccountsUsersPage() {
     </div>
     <Card className="gap-0 py-0">
       <CardContent className="p-0">
-        <DataTable data={visibleUsers} headers={['User', 'Contact', 'Status', 'Created via', { label: 'Actions', className: 'text-right' }]} label="Consumer accounts" loading={usersQuery.isLoading} loadingMessage="Loading consumer accounts…" error={usersQuery.isError ? usersQuery.error.message : null} emptyMessage={search ? `No accounts match “${search}”. Try another search.` : status ? `No ${status} consumer accounts found.` : <div className="mx-auto max-w-sm"><p className="text-sm font-medium text-ink">No consumer accounts yet</p><p className="mt-1 text-sm text-ink-muted">Add a user to start managing consumer access.</p><Button className="mt-3" variant="outline" size="sm" onClick={() => setCreateOpen(true)}>Add first user</Button></div>} emptyClassName="h-36 text-center" pagination={{ pageIndex, pageSize, totalItems: filteredUsers.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(user) => <TableRow key={user.id}>
+        <DataTable data={visibleUsers} headers={['User', 'Contact', 'Status', 'Created', 'Created via', { label: 'Actions', className: 'text-right' }]} label="Consumer accounts" loading={usersQuery.isLoading} loadingMessage="Loading consumer accounts…" error={usersQuery.isError ? usersQuery.error.message : null} emptyMessage={search ? `No accounts match “${search}”. Try another search.` : status ? `No ${status} consumer accounts found.` : <div className="mx-auto max-w-sm"><p className="text-sm font-medium text-ink">No consumer accounts yet</p><p className="mt-1 text-sm text-ink-muted">Add a user to start managing consumer access.</p><Button className="mt-3" variant="outline" size="sm" onClick={() => setCreateOpen(true)}>Add first user</Button></div>} emptyClassName="h-36 text-center" pagination={{ pageIndex, pageSize, totalItems: filteredUsers.length, onPageChange: (index) => setPageIndex(Math.min(index, pageCount - 1)), onPageSizeChange: (size) => { setPageSize(size); setPageIndex(0) } }} renderRow={(user) => <TableRow key={user.id}>
                   <TableCell><div className="flex items-center gap-3"><Monogram name={user.name || 'Unnamed user'} /><div className="min-w-0"><p className="truncate font-medium text-ink">{user.name || 'Unnamed user'}</p><p className="mt-0.5 truncate text-xs text-ink-muted">{user.email || user.phone || 'No contact details'}</p></div></div></TableCell>
                   <TableCell><span className="block">{user.email || '—'}</span><span className="mt-0.5 block text-xs text-ink-muted">{user.phone || 'No phone number'}</span></TableCell>
                   <TableCell><UserStatus status={user.status} /></TableCell>
+                  <TableCell>{user.createdAt ? formatDate(user.createdAt.slice(0, 10)) : '—'}</TableCell>
                   <TableCell>{user.createdVia || '—'}</TableCell>
                   <TableCell className="text-right"><div className="flex justify-end gap-1"><AppIconAction label={`View ${user.name}`} icon={<span aria-hidden="true">↗</span>} onClick={() => setDetailsUserId(user.id)} /><AppIconAction label={`${user.status === 'active' ? 'Suspend' : 'Activate'} ${user.name}`} icon={<span aria-hidden="true">{user.status === 'active' ? 'Ⅱ' : '▶'}</span>} disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ user, nextStatus: user.status === 'active' ? 'suspended' : 'active' })} /></div></TableCell>
                 </TableRow>} containerClassName="" />

@@ -267,7 +267,7 @@ export function RootLayout() {
   }, [isDarkMode])
 
   return (
-    <div className={`min-h-screen bg-canvas text-ink ${isDarkMode ? 'dark' : ''}`}>
+    <div className={`admin-console-shell min-h-screen bg-canvas text-ink ${isDarkMode ? 'dark' : ''}`}>
       <aside className={`fixed inset-y-0 left-0 z-10 flex flex-col border-r border-line bg-surface transition-[width] ${collapsed ? 'w-[76px]' : 'w-[248px]'}`}>
         <div className="flex h-14 items-center gap-3 border-line px-5">
           <img src={isDarkMode ? '/brand/eventrail-symbol-white.svg' : '/brand/eventrail-symbol.svg'} alt="" className="size-9 shrink-0" />

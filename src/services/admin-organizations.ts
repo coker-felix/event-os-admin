@@ -105,6 +105,7 @@ export interface OrganizationKYBRequirement {
   capability: 'organize' | 'vend' | 'host'
   key: string
   label: string
+  description?: string | null
   inputType: 'text' | 'file'
   required: boolean
   enabled: boolean
@@ -113,6 +114,7 @@ export interface OrganizationKYBRequirement {
 export interface OrganizationKYBSubmissionField {
   key: string
   label: string
+  description?: string | null
   inputType: 'text' | 'file'
   required: boolean
   textValue?: string

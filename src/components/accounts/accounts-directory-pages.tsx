@@ -48,6 +48,7 @@ import {
 } from "@phosphor-icons/react";
 import { listAdminConsumers } from "@/services/admin-users";
 import {
+  addOrganizationCapability,
   organizationSocialNetworks,
   setAdminOrganizationStatus,
   updateAdminOrganization,
@@ -56,6 +57,13 @@ import {
 import { getAdminKycProfile, listAdminKycProfiles } from "@/services/admin-kyc";
 import { listCountries } from "@/services/admin-platform";
 import { OrganizationFeatureFlagsCard } from "@/components/accounts/organization-feature-flags-card";
+import { OrganizationKYB } from "@/components/accounts/organizations/organization-kyb";
+import { OrganizationCapabilities } from "@/components/accounts/organizations/organization-capabilities";
+import { OrganizationMembers } from "@/components/accounts/organizations/organization-members";
+import { OrganizationVendorProfiles } from "@/components/accounts/organizations/organization-vendor-profiles";
+import { OrganizationVenues } from "@/components/accounts/organizations/organization-venues";
+import { OrganizationCallouts } from "@/components/accounts/organizations/organization-callouts";
+import { OrganizationOverview } from "@/components/accounts/organizations/organization-overview";
 import { formatDate } from "@/lib/date-format";
 import { formatMoney } from "@/lib/money-format";
 import {
@@ -1870,7 +1878,11 @@ export function AccountsVenueOrganizationsPage() {
     enabled: Boolean(session?.token),
   });
   const [search, setSearch] = useState("");
-  const organizations = organizationsQuery.data?.organizations ?? [];
+  const organizations = (organizationsQuery.data?.organizations ?? []).slice().sort((a, b) => {
+    const aDate = a.createdAt ? Date.parse(String(a.createdAt)) : Number.NEGATIVE_INFINITY;
+    const bDate = b.createdAt ? Date.parse(String(b.createdAt)) : Number.NEGATIVE_INFINITY;
+    return bDate - aDate || a.id.localeCompare(b.id);
+  });
 
   return <section className="space-y-6">
     <div>
@@ -2146,22 +2158,22 @@ function OrganizationEditDialog({ organization, onClose }: { organization: Admin
     },
   });
   return (
-    <Dialog
+    <Sheet
       open={Boolean(organization)}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <DialogContent>
-        <DialogHeader>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetHeader>
           <DialogTitle>Edit organization</DialogTitle>
           <DialogDescription>
             Update the organization details for {organization?.name || "this organization"}.
           </DialogDescription>
-        </DialogHeader>
+        </SheetHeader>
         <form
           id="edit-organization"
-          className="space-y-4"
+          className="flex-1 space-y-4 overflow-y-auto px-6 pb-6"
           onSubmit={(event) => {
             event.preventDefault();
             mutation.mutate();
@@ -2199,7 +2211,7 @@ function OrganizationEditDialog({ organization, onClose }: { organization: Admin
           </label>
           {mutation.isError && <ErrorMessage>{mutation.error.message}</ErrorMessage>}
         </form>
-        <DialogFooter>
+        <SheetFooter className="border-t border-line">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -2210,9 +2222,9 @@ function OrganizationEditDialog({ organization, onClose }: { organization: Admin
           >
             {mutation.isPending ? "Saving…" : "Save changes"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -2290,7 +2302,11 @@ export function AccountsOrganizationsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [editingOrganization, setEditingOrganization] = useState<AdminOrganization | null>(null);
   const [changingStatusOrganization, setChangingStatusOrganization] = useState<AdminOrganization | null>(null);
-  const organizations = organizationsQuery.data?.organizations ?? [];
+  const organizations = (organizationsQuery.data?.organizations ?? []).slice().sort((a, b) => {
+    const aDate = a.createdAt ? Date.parse(String(a.createdAt)) : Number.NEGATIVE_INFINITY;
+    const bDate = b.createdAt ? Date.parse(String(b.createdAt)) : Number.NEGATIVE_INFINITY;
+    return bDate - aDate || a.id.localeCompare(b.id);
+  });
   const owners = new Map(
     (ownersQuery.data?.users ?? []).map((owner) => [owner.id, owner]),
   );
@@ -2469,8 +2485,8 @@ export function AccountsOrganizationsPage() {
                         showLabel
                         onClick={() => {
                           void navigate({
-                            to: "/app/accounts/organizations/$orgId",
-                            params: { orgId: organization.id },
+                            to: "/app/$module/$section" as never,
+                            params: { module: "organizations", section: organization.id } as never,
                           });
                         }}
                       />
@@ -2496,6 +2512,10 @@ export function OrganizationDetailsPage({
   organizationId: string;
 }) {
   const [activeSection, setActiveSection] = useState("overview");
+  const [newCapability, setNewCapability] = useState<"organize" | "vend" | "host">("organize");
+  const [capabilityReason, setCapabilityReason] = useState("");
+  const [capabilityKey, setCapabilityKey] = useState("");
+  const client = useQueryClient();
   const { session } = useAuth();
   const navigate = useNavigate();
   const organizationsQuery = useQuery({
@@ -2540,6 +2560,16 @@ export function OrganizationDetailsPage({
   const owner = (ownersQuery.data?.users ?? []).find(
     (item) => item.id === organization?.ownerId,
   );
+  const availableCapabilities = (["organize", "vend", "host"] as const).filter((value) => !(organization?.capabilities ?? []).some((item) => item?.capability === value));
+  const addCapability = useMutation({
+    mutationFn: (key: string) => addOrganizationCapability(session!.token, organizationId, { capability: newCapability, reason: capabilityReason.trim(), idempotencyKey: key }),
+    onSuccess: async () => { sessionStorage.removeItem(`admin-add-capability:${organizationId}:${newCapability}`); setCapabilityKey(""); setCapabilityReason(""); await client.invalidateQueries({ queryKey: organizationsKey }); },
+  });
+  const submitCapability = (event: FormEvent) => {
+    event.preventDefault();
+    const key = capabilityKey || sessionStorage.getItem(`admin-add-capability:${organizationId}:${newCapability}`) || crypto.randomUUID();
+    setCapabilityKey(key); sessionStorage.setItem(`admin-add-capability:${organizationId}:${newCapability}`, key); addCapability.mutate(key);
+  };
   const registrations = (commerceQuery.data?.registrations ?? []).filter(
     (item): item is NonNullable<typeof item> => Boolean(item),
   );
@@ -2605,7 +2635,7 @@ export function OrganizationDetailsPage({
             </CardContent>
           </Card>
           <div role="tablist" aria-label="Organization sections" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-surface-muted p-1" onKeyDown={(event) => {
-            const values = ["overview", "ownership", "members", "documents", "commerce", "features"];
+            const values = ["overview", "ownership", "members", "documents", "capabilities", "verification", "vendors", "venues", "callouts", "commerce", "features"];
             const currentIndex = values.indexOf(activeSection);
             const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? values.length - 1 : event.key === "ArrowRight" ? (currentIndex + 1) % values.length : event.key === "ArrowLeft" ? (currentIndex - 1 + values.length) % values.length : -1;
             if (nextIndex >= 0) {
@@ -2619,67 +2649,18 @@ export function OrganizationDetailsPage({
               ["overview", "Overview"],
               ["ownership", "Owner & contact"],
               ["members", "Organization members"],
-              ["documents", "KYC documents"],
+              ["documents", "Account KYC"],
+              ["verification", "Capability KYB"],
+              ["capabilities", "Capabilities"],
+              ["vendors", "Vendor profiles"],
+              ["venues", "Venues"],
+              ["callouts", "Callouts"],
               ["commerce", "Commerce & tax"],
               ["features", "Feature flags"],
             ] as const).map(([value, label]) => <button key={value} id={`organization-tab-${value}`} type="button" role="tab" tabIndex={activeSection === value ? 0 : -1} aria-selected={activeSection === value} aria-controls="organization-section-panel" onClick={() => setActiveSection(value)} className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-brand ${activeSection === value ? "bg-surface text-brand shadow-sm" : "text-ink-muted hover:bg-surface hover:text-ink"}`}>{label}</button>)}
           </div>
           <div id="organization-section-panel" role="tabpanel" aria-labelledby={`organization-tab-${activeSection}`} tabIndex={0} className="outline-none focus-visible:ring-2 focus-visible:ring-brand/30">
-          {activeSection === "overview" && <Card>
-            <CardHeader>
-              <CardTitle>Organization profile</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-[minmax(7rem,auto)_1fr] gap-x-5 gap-y-4 text-sm">
-                <dt className="text-ink-muted">Name</dt>
-                <dd className="font-medium">{organization.name || "—"}</dd>
-                <dt className="text-ink-muted">Organization ID</dt>
-                <dd className="break-all font-mono text-xs">
-                  {organization.id}
-                </dd>
-                <dt className="text-ink-muted">Slug</dt>
-                <dd>{organization.slug || "—"}</dd>
-                <dt className="text-ink-muted">Capabilities</dt>
-                <dd>
-                  <OrganizationCapabilitiesBadges capabilities={organization.capabilities} />
-                </dd>
-                <dt className="text-ink-muted">Status</dt>
-                <dd>
-                  {organization.status === "active" ? (
-                    <Badge className="bg-success-soft text-success">
-                      Active
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">
-                      {organization.status || "Unknown"}
-                    </Badge>
-                  )}
-                </dd>
-                <dt className="text-ink-muted">KYC status</dt>
-                <dd>
-                  {organization.kycStatus === "approved" ? (
-                    <Badge className="bg-success-soft text-success">
-                      Approved
-                    </Badge>
-                  ) : organization.kycStatus === "pending" ? (
-                    <Badge className="bg-warning-soft text-warning">
-                      Pending
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">
-                      {organization.kycStatus || "Unknown"}
-                    </Badge>
-                  )}
-                </dd>
-                <dt className="text-ink-muted">Created</dt>
-                <dd>
-                  {typeof organization.createdAt === "string"
-                    ? formatDate(organization.createdAt.slice(0, 10))
-                    : "—"}
-                </dd>
-              </dl>
-            </CardContent>
-          </Card>}
+          {activeSection === "overview" && <OrganizationOverview organization={organization} />}
           {activeSection === "ownership" && <Card>
             <CardHeader>
               <CardTitle>Owner and contact</CardTitle>
@@ -2713,20 +2694,7 @@ export function OrganizationDetailsPage({
               )}
             </CardContent>
           </Card>}
-          {activeSection === "members" && <Card>
-            <CardHeader><CardTitle>Organization members</CardTitle></CardHeader>
-            <CardContent>
-              {membersQuery.isLoading ? <p className="py-6 text-center text-sm text-ink-muted">Loading organization members…</p>
-                : membersQuery.isError ? <ErrorMessage>{membersQuery.error.message}</ErrorMessage>
-                  : (membersQuery.data?.members ?? []).length ? <ul className="divide-y divide-line">
-                    {(membersQuery.data?.members ?? []).map((member, index) => <li key={member.id || member.userId || member.accountId || index} className="flex flex-wrap items-center gap-x-8 gap-y-2 py-3 first:pt-0 last:pb-0">
-                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.name || member.email || member.userId || member.accountId || "Unnamed member"}</p><p className="mt-1 break-all text-xs text-ink-muted">{member.email || member.phone || "No contact details"}</p></div>
-                      <Badge variant="outline">{member.roleName || member.role || member.roleId || "Member"}</Badge>
-                      <OrganizationMemberStatus status={member.status} />
-                    </li>)}
-                  </ul> : <p className="py-6 text-center text-sm text-ink-muted">No members found for this organization.</p>}
-            </CardContent>
-          </Card>}
+          {activeSection === "members" && <OrganizationMembers organizationId={organizationId} ownerId={organization.ownerId} capabilities={organization.capabilities ?? []} />}
           {activeSection === "documents" && <Card>
             <CardHeader><CardTitle>Submitted KYC documents</CardTitle><p className="text-sm text-ink-muted">Documents submitted for this organization’s verification case.</p></CardHeader>
             <CardContent>
@@ -2750,6 +2718,11 @@ export function OrganizationDetailsPage({
                         </ul> : <p className="py-6 text-center text-sm text-ink-muted">No documents have been submitted for this organization.</p>}
             </CardContent>
           </Card>}
+          {activeSection === "capabilities" && <div className="space-y-4"><OrganizationCapabilities organizationId={organizationId} capabilities={organization.capabilities ?? []} /><Card><CardHeader><CardTitle>Add organization capability</CardTitle></CardHeader><CardContent>{availableCapabilities.length ? <form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={submitCapability}><label className="space-y-1.5 text-sm font-medium">Capability<select value={newCapability} onChange={(event) => { setNewCapability(event.target.value as typeof newCapability); setCapabilityKey(""); }} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm">{availableCapabilities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="space-y-1.5 text-sm font-medium">Reason<Input required value={capabilityReason} onChange={(event) => setCapabilityReason(event.target.value)} /></label><div className="flex items-end"><Button type="submit" disabled={addCapability.isPending || !capabilityReason.trim()}>{addCapability.isPending ? "Adding…" : "Add capability"}</Button></div>{addCapability.isError && <ErrorMessage>{addCapability.error.message}</ErrorMessage>}</form> : <p className="text-sm text-ink-muted">All available capabilities are already assigned.</p>}</CardContent></Card></div>}
+          {activeSection === "verification" && <div className="space-y-4"><p className="text-sm text-ink-muted">Review capability KYB submissions here. Account level KYC documents are in the Account KYC tab. After approving KYB, activate the capability in Capabilities.</p><OrganizationKYB organizationId={organizationId} capabilities={organization.capabilities ?? []} /><OrganizationCapabilities organizationId={organizationId} capabilities={organization.capabilities ?? []} /></div>}
+          {activeSection === "vendors" && <OrganizationVendorProfiles organizationId={organizationId} enabled={(organization.capabilities ?? []).some((item) => item?.capability === "vend" && item.status === "active" && item.kybStatus === "approved")} />}
+          {activeSection === "venues" && <OrganizationVenues organizationId={organizationId} enabled={(organization.capabilities ?? []).some((item) => item?.capability === "host" && item.status === "active" && item.kybStatus === "approved")} />}
+          {activeSection === "callouts" && <OrganizationCallouts organizationId={organizationId} enabled={(organization.capabilities ?? []).some((item) => item?.capability === "organize" && item.status === "active" && item.kybStatus === "approved")} />}
           {activeSection === "commerce" && <Card>
             <CardHeader>
               <CardTitle>Commerce and tax profile</CardTitle>
@@ -2857,7 +2830,11 @@ export function AccountsOrganizationUsersPage() {
     queryFn: () => listOrganizationMembers(session!.token, lookupId, "organizer"),
     enabled: Boolean(session?.token && lookupId),
   });
-  const organizations = organizationsQuery.data?.organizations ?? [];
+  const organizations = (organizationsQuery.data?.organizations ?? []).slice().sort((a, b) => {
+    const aDate = a.createdAt ? Date.parse(String(a.createdAt)) : Number.NEGATIVE_INFINITY;
+    const bDate = b.createdAt ? Date.parse(String(b.createdAt)) : Number.NEGATIVE_INFINITY;
+    return bDate - aDate || a.id.localeCompare(b.id);
+  });
   const members = membersQuery.data?.members ?? [];
   return (
     <section className="space-y-6">

@@ -160,12 +160,14 @@ export function OrganizationKYB({ organizationId, capabilities }: { organization
                   return requirement.inputType === 'text' ? (
                     <label key={requirement.key} className="block max-w-xl space-y-1.5 text-sm font-medium">
                       {requirement.label}{requirement.required ? ' · Required' : ' · Optional'}
+                      {requirement.description && <span className="block text-xs font-normal text-ink-muted">{requirement.description}</span>}
                       <Input value={fieldValues[valueKey] ?? savedField?.textValue ?? ''} maxLength={500} onChange={(event) => setFieldValues((current) => ({ ...current, [valueKey]: event.target.value }))} />
                     </label>
                   ) : (
                     <div key={requirement.key} className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-[1fr_auto] sm:items-end">
                       <label className="space-y-1.5 text-sm font-medium">
                         {requirement.label}{requirement.required ? ' · Required' : ' · Optional'}
+                        {requirement.description && <span className="block text-xs font-normal text-ink-muted">{requirement.description}</span>}
                         <Input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setSelectedFiles((current) => ({ ...current, [requirement.key]: event.target.files?.[0] ?? null }))} />
                         <span className="block text-xs font-normal text-ink-muted">PDF, JPEG, or PNG · up to 15 MiB</span>
                       </label>
@@ -186,7 +188,7 @@ export function OrganizationKYB({ organizationId, capabilities }: { organization
                 {submittedFields.map((field) => {
                   const evidence = evidenceByKey.get(field.key)
                   return <div key={field.key} className="flex flex-wrap items-start justify-between gap-2 border-t border-line pt-2 text-sm">
-                    <span className="font-medium">{field.label}</span>
+                    <div><span className="font-medium">{field.label}</span>{field.description && <p className="mt-1 text-xs text-ink-muted">{field.description}</p>}</div>
                     {field.inputType === 'text' ? <span className="break-all text-ink-muted">{field.textValue || 'Not provided'}</span> : <span className="text-ink-muted">File · {evidence?.scanStatus || 'status unavailable'}</span>}
                   </div>
                 })}
