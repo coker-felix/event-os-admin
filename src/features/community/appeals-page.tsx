@@ -51,14 +51,14 @@ export function AppealsPage() {
     <Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={appeals} headers={['User', 'Original action', 'Reason given', 'Appeal note', 'Submitted', { label: 'Actions', className: 'text-right' }]} label="Community appeals" loading={query.isLoading} loadingMessage="Loading appeals…" error={query.isError ? communityErrorMessage(query.error) : null} emptyMessage={status === 'open' ? 'No open appeals.' : `No ${status} appeals.`} pagination={{ pageIndex: page, pageSize, totalItems: query.data?.total ?? 0, onPageChange: setPage, onPageSizeChange: (size) => { setPageSize(size); setPage(0) } }} renderRow={(appeal: Appeal) => {
       const originalModerator = appeal.action?.moderatorUserId
       const restricted = Boolean(currentAdminId && originalModerator && currentAdminId === originalModerator)
-      const action = display(appeal.action?.type).replaceAll('_', ' ')
-      const submitted = appeal.submittedAt?.slice(0, 10)
+      const action = display(appeal.action?.action).replaceAll('_', ' ')
+      const submitted = appeal.createdAt?.slice(0, 10)
       return <TableRow key={appeal.id}>
-        <TableCell><span className="block font-medium">{display(appeal.userId)}</span><span className="mt-0.5 block text-xs text-ink-muted">{appeal.id}</span></TableCell>
+        <TableCell><span className="block font-medium">{display(appeal.user?.displayName)}</span><span className="mt-0.5 block text-xs text-ink-muted">{appeal.user?.userId || appeal.userId || appeal.id}</span></TableCell>
         <TableCell><Badge variant="outline" className="capitalize">{action}</Badge></TableCell>
-        <TableCell className="max-w-56 truncate" title={appeal.reason || ''}>{display(appeal.reason)}</TableCell>
+        <TableCell className="max-w-56 truncate" title={appeal.action?.reason || ''}>{display(appeal.action?.reason)}</TableCell>
         <TableCell className="max-w-56 truncate" title={appeal.note || ''}>{display(appeal.note)}</TableCell>
-        <TableCell>{submitted ? <time dateTime={appeal.submittedAt}>{formatDate(submitted)}</time> : 'Not provided'}</TableCell>
+        <TableCell>{submitted ? <time dateTime={appeal.createdAt}>{formatDate(submitted)}</time> : 'Not provided'}</TableCell>
         <TableCell className="text-right"><div className="flex justify-end">{restricted ? <Tooltip><TooltipTrigger render={<span tabIndex={0} className="inline-flex"><button type="button" disabled aria-label="Decide" className="inline-flex h-8 items-center gap-2 rounded-full bg-surface-muted px-3 text-xs text-ink-muted opacity-60"><Gavel size={16} />Decide</button></span>} /><TooltipContent>Another moderator must decide this appeal</TooltipContent></Tooltip> : appeal.status === 'open' ? <AppIconAction label="Decide" icon={<Gavel size={16} />} onClick={() => setSelected(appeal)} /> : <span className="text-xs text-ink-muted">Decided</span>}</div></TableCell>
       </TableRow>
     }} containerClassName="" /></CardContent></Card>

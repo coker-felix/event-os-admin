@@ -1,24 +1,24 @@
 import { adminApiBaseUrl, authenticatedAdminFetch } from './admin-auth'
 
 export interface TargetPreview {
-  targetType: string
-  targetId: string
-  title?: string | null
-  excerpt?: string | null
-  status?: string | null
-  authorUserId?: string | null
-  authorName?: string | null
-  authorSuspended?: boolean
+  title: string
+  excerpt: string
+  authorUserId: string
+  authorName: string
+  authorSuspended: boolean
+  status: string
 }
 export interface CommunityReport {
   id: string
+  reporterUserId: string
   targetType: string
   targetId: string
   reason: string
+  details: string
   status: string
-  createdAt?: string | null
+  createdAt: string
   targetPreview: TargetPreview
-  reportCount?: number
+  openReportCount: number
 }
 export interface ModerationActionInput {
   targetType: string
@@ -30,28 +30,34 @@ export interface ModerationActionInput {
 }
 export interface Appeal {
   id: string
+  actionId: string
   userId: string
+  note: string
   status: string
-  reason?: string
-  note?: string
-  submittedAt?: string
-  action?: { type?: string; moderatorUserId?: string }
+  decidedBy: string
+  createdAt: string
+  user: AppealUser
+  action: AppealAction
 }
+export interface AppealUser { userId: string; displayName: string }
+export interface AppealAction { id: string; action: string; reason: string; targetType: string; targetId: string; moderatorUserId: string }
 export interface AdminBlueprint {
   id: string
   title: string
+  summary: string
+  authorUserId: string
   status: string
-  authorUserId?: string
-  authorName?: string
-  creditedOrgName?: string
-  version?: number
-  forkCount?: number
-  publishedAt?: string | null
-  snapshot?: { name: string; version: number; tasks: Array<{ key: string; title: string; offsetAmount: number; offsetUnit: string; weekendPolicy: string; leadDays: number; dependsOn: string[] }> }
+  creditedOrgId: string
+  currentVersion: number
+  forkCount: number
+  createdAt: string
+  authorName: string
 }
-export interface Suspension { userId: string; reason: string; until?: string | null; suspendedBy?: string; since?: string }
-export interface BadgeHolder { userId: string; badge: string; grantedAt?: string; name?: string; email?: string }
+export interface Suspension { userId: string; reason: string; until: string; suspendedBy: string; createdAt: string; displayName: string }
+export interface BadgeHolder { userId: string; badge: string; grantedBy: string; grantedAt: string; displayName: string }
 export interface Skill { id: string; name: string; slug: string }
+export interface Profile { userId: string; displayName: string; headline: string; bio: string; country: string; city: string; availability: string; visibility: string; status: string; skillIds: string[]; badges: string[]; accountState: string; can?: { publishBlueprint: boolean; report: boolean; appeal: boolean } | null }
+export interface ProfileResponse { profile?: Profile | null; accountState: string; can?: { publishBlueprint: boolean; report: boolean; appeal: boolean } | null }
 export type Page<T> = { items: T[]; total: number }
 
 export function normalizePage<T>(value: { items?: T[] | null; total?: number | null } | null | undefined): Page<T> {
@@ -95,4 +101,4 @@ export const listBadges = (token: string, badge: string, query: { limit?: number
 export const setBadge = (token: string, input: { userId: string; badge: string; grant: boolean }) => request(token, '/api/admin/community/badges', json('POST', input))
 export const listSkills = (token: string, query: { limit?: number; offset?: number } = {}) => list<Skill>(token, '/api/admin/community/skills', 'skills', query)
 export const upsertSkill = (token: string, id: string, input: { name: string; slug: string }) => request<Skill>(token, `/api/admin/community/skills/${encodeURIComponent(id)}`, json('PUT', input))
-export const getAdminProfile = (token: string, userId: string) => request(token, `/api/admin/community/profiles/${encodeURIComponent(userId)}`)
+export const getAdminProfile = (token: string, userId: string) => request<ProfileResponse>(token, `/api/admin/community/profiles/${encodeURIComponent(userId)}`)

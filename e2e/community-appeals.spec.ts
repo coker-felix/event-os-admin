@@ -8,8 +8,8 @@ const token = `e30.${btoa(JSON.stringify({ sub: adminId }))}.sig`
 
 test('appeals prevent the original moderator deciding and explain a forbidden decision', async ({ page }) => {
   await page.route('**/api/admin/community/appeals*', route => route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ appeals: [
-    { id: 'appeal-own', userId: 'user-1', status: 'open', reason: 'I disagree', note: 'Please review this decision', submittedAt: '2026-07-13T10:00:00Z', action: { type: 'hide', moderatorUserId: adminId } },
-    { id: 'appeal-other', userId: 'user-2', status: 'open', reason: 'Wrong target', note: 'This was not my post', submittedAt: '2026-07-12T10:00:00Z', action: { type: 'suspend_user', moderatorUserId: 'admin-other' } },
+    { id: 'appeal-own', actionId: 'action-1', userId: 'user-1', user: { userId: 'user-1', displayName: 'Ama Mensah' }, status: 'open', note: 'Please review this decision', createdAt: '2026-07-13T10:00:00Z', decidedBy: '', action: { id: 'action-1', action: 'hide', reason: 'I disagree', targetType: 'blueprint', targetId: 'bp-1', moderatorUserId: adminId } },
+    { id: 'appeal-other', actionId: 'action-2', userId: 'user-2', user: { userId: 'user-2', displayName: 'Kojo Boateng' }, status: 'open', note: 'This was not my post', createdAt: '2026-07-12T10:00:00Z', decidedBy: '', action: { id: 'action-2', action: 'suspend_user', reason: 'Wrong target', targetType: 'user', targetId: 'user-2', moderatorUserId: 'admin-other' } },
   ], total: 2 }) }))
   await page.route('**/api/admin/community/appeals/appeal-other/decide', route => route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: JSON.stringify({ error: 'Forbidden', reason: 'forbidden' }) }))
   await page.addInitScript((sessionToken) => sessionStorage.setItem('event-os-admin-session', JSON.stringify({ token: sessionToken, tokenType: 'Bearer' })), token)

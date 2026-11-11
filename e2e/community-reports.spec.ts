@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test.use({ trace: 'off' })
 
 const headers = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'authorization, content-type' }
-const report = (id: string, status: string, targetStatus: string) => ({ id, targetType: 'blueprint', targetId: 'bp-1', reason: 'Misleading details', status, createdAt: '2026-07-13T10:00:00Z', reportCount: 3, targetPreview: { targetType: 'blueprint', targetId: 'bp-1', title: 'Community garden plan', excerpt: 'A detailed plan for a community garden.', status: targetStatus, authorUserId: 'user-1', authorName: 'Ama Mensah', authorSuspended: false } })
+const report = (id: string, status: string, targetStatus: string) => ({ id, reporterUserId: 'reporter-1', targetType: 'blueprint', targetId: 'bp-1', reason: 'Misleading details', details: '', status, createdAt: '2026-07-13T10:00:00Z', openReportCount: 3, targetPreview: { title: 'Community garden plan', excerpt: 'A detailed plan for a community garden.', status: targetStatus, authorUserId: 'user-1', authorName: 'Ama Mensah', authorSuspended: false } })
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem('event-os-admin-session', JSON.stringify({ token: 'admin-test-token', tokenType: 'Bearer' })))

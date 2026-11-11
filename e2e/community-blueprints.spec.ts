@@ -11,9 +11,9 @@ test('blueprint filters and moderation actions follow status and require a reaso
     const url = new URL(route.request().url())
     status = url.searchParams.get('status') ?? ''
     const all = [
-      { id: 'bp-pub', title: 'Published plan', status: 'published', authorName: 'Ama', creditedOrgName: 'Accra Events', version: 2, forkCount: 4, publishedAt: '2026-07-13', snapshot: { name: 'Published plan', version: 2, tasks: [] } },
-      { id: 'bp-hidden', title: 'Hidden plan', status: 'hidden', authorName: 'Kojo', creditedOrgName: 'Night Market', version: 1, forkCount: 0 },
-      { id: 'bp-withdrawn', title: 'Withdrawn plan', status: 'withdrawn', authorName: 'Esi', creditedOrgName: '—', version: 1, forkCount: 0 },
+      { id: 'bp-pub', title: 'Published plan', summary: '', authorUserId: 'user-1', status: 'published', authorName: 'Ama', creditedOrgId: 'org-1', currentVersion: 2, forkCount: 4, createdAt: '2026-07-13T10:00:00Z' },
+      { id: 'bp-hidden', title: 'Hidden plan', summary: '', authorUserId: 'user-2', status: 'hidden', authorName: 'Kojo', creditedOrgId: 'org-2', currentVersion: 1, forkCount: 0, createdAt: '2026-07-12T10:00:00Z' },
+      { id: 'bp-withdrawn', title: 'Withdrawn plan', summary: '', authorUserId: 'user-3', status: 'withdrawn', authorName: 'Esi', creditedOrgId: '', currentVersion: 1, forkCount: 0, createdAt: '2026-07-11T10:00:00Z' },
     ]
     const blueprints = status ? all.filter(item => item.status === status) : all
     return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ blueprints, total: blueprints.length }) })

@@ -47,11 +47,11 @@ export function BlueprintsPage() {
       if (blueprint.status === 'hidden') actions.push({ action: 'restore', label: 'Restore', icon: <Eye size={16} /> })
       if (blueprint.status !== 'withdrawn') actions.push({ action: 'withdraw', label: 'Withdraw', icon: <GitBranch size={16} /> })
       return <TableRow key={blueprint.id}>
-        <TableCell><span className="block font-medium">{display(blueprint.title || blueprint.snapshot?.name)}</span><span className="mt-0.5 block text-xs text-ink-muted">{display(blueprint.authorName)}</span></TableCell>
-        <TableCell>{display(blueprint.creditedOrgName)}</TableCell><TableCell>{blueprint.version ?? blueprint.snapshot?.version ?? '—'}</TableCell>
+        <TableCell><span className="block font-medium">{display(blueprint.title)}</span><span className="mt-0.5 block text-xs text-ink-muted">{display(blueprint.authorName)}</span></TableCell>
+        <TableCell>{display(blueprint.creditedOrgId)}</TableCell><TableCell>{blueprint.currentVersion ?? '—'}</TableCell>
         <TableCell className="text-right tabular-nums">{blueprint.forkCount ?? 0}</TableCell>
         <TableCell><Badge className={statusStyle(blueprint.status)}>{display(blueprint.status)}</Badge></TableCell>
-        <TableCell>{blueprint.publishedAt ? <time dateTime={blueprint.publishedAt}>{formatDate(blueprint.publishedAt.slice(0, 10))}</time> : 'Not published'}</TableCell>
+        <TableCell>{blueprint.createdAt ? <time dateTime={blueprint.createdAt}>{formatDate(blueprint.createdAt.slice(0, 10))}</time> : 'Not provided'}</TableCell>
         <TableCell className="text-right"><div className="flex justify-end gap-1">{actions.map(({ action, label, icon }) => <AppIconAction key={action} label={label} icon={icon} onClick={() => setPendingAction({ blueprint, action })} />)}</div></TableCell>
       </TableRow>
     }} containerClassName="" /></CardContent></Card>
