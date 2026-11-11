@@ -96,6 +96,7 @@ const itemIcons: Record<string, Icon> = {
   '/app/platform/calendar-rules': Calendar,
   '/app/platform/playbooks': FileText,
   '/app/platform/venue-types': MapPin,
+  '/app/platform/seat-chart-templates': MapPin,
   '/app/platform/venue-spec-fields': Sliders,
 
   '/app/commerce/taxes': Percent,
@@ -216,6 +217,7 @@ const navigation: readonly AdminNavigationModule[] = [
       { label: 'Calendar rules', to: '/app/platform/calendar-rules' },
       { label: 'Platform playbooks', to: '/app/platform/playbooks' },
       { label: 'Venue types', to: '/app/platform/venue-types' },
+      { label: 'Seat chart templates', to: '/app/platform/seat-chart-templates' },
       { label: 'Venue spec fields', to: '/app/platform/venue-spec-fields' },
     ],
   },
