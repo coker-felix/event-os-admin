@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { CommunityPlaceholderPage } from '@/features/community/placeholder-page'
+import { AppealsPage } from '@/features/community/appeals-page'
 
 export const Route = createFileRoute('/app/_dashboard/community/appeals')({
-  component: () => <CommunityPlaceholderPage title="Appeals" />,
+  component: AppealsPage,
 })
