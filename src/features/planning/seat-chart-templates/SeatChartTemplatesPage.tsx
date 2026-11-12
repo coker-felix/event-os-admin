@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { SeatingViewer } from '@event-os/seating-renderer'
 import { useAuth } from '@/contexts/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ export function SeatChartTemplatesPage() {
   const client = useQueryClient()
   const [versionId, setVersionId] = useState('')
   const [title, setTitle] = useState('')
+  const [previewId, setPreviewId] = useState('')
   const query = useQuery({ queryKey: ['seat-chart-templates'], queryFn: () => getSeatChartTemplates(session!.token), enabled: Boolean(session?.token) })
   const create = useMutation({
     mutationFn: () => createSeatChartTemplate(session!.token, versionId.trim(), title.trim()),
@@ -34,7 +36,11 @@ export function SeatChartTemplatesPage() {
           {create.error && <p role="alert" className="text-sm text-destructive md:col-span-3">{create.error.message}</p>}
         </CardContent>
       </Card>
-      {query.isError ? <PlanningError error={query.error} /> : <Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={query.data?.templates ?? []} label="Seat chart templates" headers={['Template', 'Version', 'Checksum', 'Created']} loading={query.isLoading} loadingMessage="Loading seat chart templates…" emptyMessage="No platform templates yet." containerClassName="" renderRow={(item) => <TableRow key={item.id}><TableCell className="font-medium">{item.title}</TableCell><TableCell className="font-mono text-xs">{item.versionId}</TableCell><TableCell className="font-mono text-xs">{item.checksum.slice(0, 12)}</TableCell><TableCell>{item.createdAt ? new Date(item.createdAt * 1000).toLocaleDateString() : '—'}</TableCell></TableRow>} /></CardContent></Card>}
+      {query.isError ? <PlanningError error={query.error} /> : <Card className="gap-0 py-0"><CardContent className="p-0"><DataTable data={query.data?.templates ?? []} label="Seat chart templates" headers={['Template', 'Version', 'Checksum', 'Created', '']} loading={query.isLoading} loadingMessage="Loading seat chart templates…" emptyMessage="No platform templates yet." containerClassName="" renderRow={(item) => <TableRow key={item.id}><TableCell className="font-medium">{item.title}</TableCell><TableCell className="font-mono text-xs">{item.versionId}</TableCell><TableCell className="font-mono text-xs">{item.checksum.slice(0, 12)}</TableCell><TableCell>{item.createdAt ? new Date(item.createdAt * 1000).toLocaleDateString() : '—'}</TableCell><TableCell><button type="button" className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-expanded={previewId === item.id} onClick={() => setPreviewId((current) => current === item.id ? '' : item.id)}>{previewId === item.id ? 'Close preview' : 'Preview'}</button></TableCell></TableRow>} /></CardContent></Card>}
+      {query.data?.templates?.find((item) => item.id === previewId) && (() => {
+        const template = query.data.templates.find((item) => item.id === previewId)!
+        return <Card className="mt-4"><CardContent className="p-5"><div className="mb-4"><h2 className="text-lg font-semibold">{template.title}</h2><p className="text-sm text-muted-foreground">Version {template.versionId} · {template.checksum.slice(0, 12)}</p></div><SeatingViewer chart={template.document} manifest={template.manifest} mode="map" /></CardContent></Card>
+      })()}
     </PageShell>
   )
 }

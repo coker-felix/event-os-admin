@@ -1,4 +1,5 @@
 import { adminApiBaseUrl, authenticatedAdminFetch } from './admin-auth'
+import type { ChartManifest, SeatChartDocument } from '@event-os/seating-core'
 
 export interface SeatChartTemplate {
   id: string
@@ -6,6 +7,8 @@ export interface SeatChartTemplate {
   versionId: string
   checksum: string
   createdAt: number
+  document: SeatChartDocument
+  manifest: ChartManifest
 }
 
 async function request<T>(token: string, path: string, init?: RequestInit): Promise<T> {
