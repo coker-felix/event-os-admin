@@ -64,6 +64,7 @@ const moduleIcons: Record<AdminNavigationModule['id'], Icon> = {
   ticketing: Ticket,
   staff: ShieldCheck,
   platform: GearSix,
+  seatCharts: MapTrifold,
   commerce: CurrencyDollar,
   marketplace: Storefront,
   documents: FileText,
@@ -96,6 +97,7 @@ const itemIcons: Record<string, Icon> = {
   '/app/platform/calendar-rules': Calendar,
   '/app/platform/playbooks': FileText,
   '/app/platform/venue-types': MapPin,
+  '/app/platform/seat-charts': MapPin,
   '/app/platform/seat-chart-templates': MapPin,
   '/app/platform/venue-spec-fields': Sliders,
 
@@ -203,6 +205,22 @@ const navigation: readonly AdminNavigationModule[] = [
     ],
   },
   {
+    id: 'seatCharts', label: 'Seat Chart', icon: '⌖', items: [
+      { label: 'Venue charts', to: '/app/platform/seat-charts' },
+      { label: 'Templates', to: '/app/platform/seat-chart-templates' },
+    ],
+  },
+  {
+    id: 'community', label: 'Community', icon: '◉', items: [
+      { label: 'Reports', to: '/app/community/reports' },
+      { label: 'Appeals', to: '/app/community/appeals' },
+      { label: 'Blueprints', to: '/app/community/blueprints' },
+      { label: 'Suspensions', to: '/app/community/suspensions' },
+      { label: 'Badges', to: '/app/community/badges' },
+      { label: 'Skills', to: '/app/community/skills' },
+    ],
+  },
+  {
     id: 'platform', label: 'Adminstration', icon: '⚙', items: [
       { label: 'Overview', to: '/app/platform/overview' },
       { label: 'Platform settings', to: '/app/platform/settings' },
@@ -217,20 +235,9 @@ const navigation: readonly AdminNavigationModule[] = [
       { label: 'Calendar rules', to: '/app/platform/calendar-rules' },
       { label: 'Platform playbooks', to: '/app/platform/playbooks' },
       { label: 'Venue types', to: '/app/platform/venue-types' },
-      { label: 'Seat chart templates', to: '/app/platform/seat-chart-templates' },
       { label: 'Venue spec fields', to: '/app/platform/venue-spec-fields' },
     ],
-  },
-  {
-    id: 'community', label: 'Community', icon: '◉', items: [
-      { label: 'Reports', to: '/app/community/reports' },
-      { label: 'Appeals', to: '/app/community/appeals' },
-      { label: 'Blueprints', to: '/app/community/blueprints' },
-      { label: 'Suspensions', to: '/app/community/suspensions' },
-      { label: 'Badges', to: '/app/community/badges' },
-      { label: 'Skills', to: '/app/community/skills' },
-    ],
-  },
+  }
 ]
 
 export function RootLayout() {
